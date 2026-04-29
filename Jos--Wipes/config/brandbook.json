@@ -1,0 +1,206 @@
+{
+  "meta": {
+    "versao": "1.0",
+    "data_criacao": "2026-04-07",
+    "autor": "ATRIA Corp",
+    "projeto": "José Wipes Pipeline"
+  },
+  "marca": {
+    "nome": "José Wipes",
+    "tagline": "Limpo. Confiante. Sem Fragrância.",
+    "slogan_comercial": "A recuperação que você merece.",
+    "referencia_principal": "Dude Wipes (EUA)"
+  },
+  "produto": {
+    "tipo": "Lenços umedecidos descartáveis para homens",
+    "quantidade": "48 unidades",
+    "composicao": "99% água, aloe vera, vitamina E",
+    "diferenciais": [
+      "Sem fragrância",
+      "Extra grosso",
+      "Extra grande",
+      "Descartável no vaso"
+    ],
+    "embalagem": {
+      "cor": "Branca com texto preto",
+      "tampa": "Flip-top preta",
+      "logo": "Escudo com montanha e onda"
+    },
+    "descricao_para_prompt": "white wet wipes package with bold black typography and shield logo",
+    "foto_referencia_disponivel": true,
+    "foto_referencia_path": "assets/referencias/embalagem_jose_wipes_oficial-removebg-preview.png",
+    "nota_produto": "Imagem oficial da embalagem disponível. SEMPRE usar como referência visual (input_images) em gerações que mostram o produto. Nunca gerar o produto do zero sem referência."
+  },
+  "identidade_visual": {
+    "paleta": {
+      "primarias": ["#000000", "#FFFFFF"],
+      "regra": "100% preto e branco, sem cores na identidade de marca. Cenas podem ter cor natural."
+    },
+    "tipografia": {
+      "familia": "Sans-serif bold, caixa alta",
+      "estilo": "Industrial, masculina",
+      "referencia": "Oswald Bold"
+    },
+    "logo": {
+      "descricao": "Escudo com montanha e onda",
+      "arquivo": "assets/logo/logo_jose_wipes.png",
+      "regra": "SEMPRE preto e branco"
+    }
+  },
+  "tom_de_voz": {
+    "estilo": "Humor seco e inteligente, paródia séria, deadpan comedy",
+    "principio": "O humor vem do CONTRASTE entre seriedade cinematográfica e banalidade do assunto",
+    "referencias": ["The Office", "Dude Wipes", "Old Spice", "Dollar Shave Club"],
+    "nunca": ["Pastelão", "Escatológico explícito", "Vulgar"],
+    "palavras_positivas": ["limpo", "confiante", "sem frescura", "proteção", "recuperação"],
+    "palavras_negativas": ["delicado", "suave aroma", "feminino", "spa", "floral"]
+  },
+  "publico_alvo": {
+    "genero": "Masculino",
+    "idade": "25-45 anos",
+    "perfil": "Urbanos, ativos",
+    "dor": "Experiências constrangedoras em banheiros públicos",
+    "motivacao": "Quer se sentir limpo sem parecer 'fresco'"
+  },
+  "mensagens_chave": {
+    "primaria": "A recuperação que você merece.",
+    "secundaria": "Limpo. Confiante. Sem Fragrância.",
+    "terceira": "Sem fragrância. Sem cheirinho. Apenas para homens."
+  },
+  "ocasioes_consumo": [
+    {
+      "nome_pt": "Estádio",
+      "nome_en": "Stadium",
+      "cenario_prompt": "Crowded Brazilian football stadium bathroom with fluorescent lighting, long queue of anxious men, worn tile walls, industrial fixtures, tense atmosphere",
+      "dor": "Banheiro lotado, sem opção decente de limpeza"
+    },
+    {
+      "nome_pt": "Aeroporto",
+      "nome_en": "Airport",
+      "cenario_prompt": "Modern international airport terminal bathroom, bright clean lighting, businessman in suit looking stressed near sink area, carry-on luggage visible, clinical atmosphere",
+      "dor": "Viagem longa, desconforto, sem privacidade"
+    },
+    {
+      "nome_pt": "Estrada",
+      "nome_en": "Highway",
+      "cenario_prompt": "Brazilian highway truck stop restroom, harsh overhead light, rough concrete walls, trucker standing at entrance looking concerned, dusty road visible through window, golden hour exterior",
+      "dor": "Posto de gasolina isolado, banheiro precário"
+    },
+    {
+      "nome_pt": "Festival",
+      "nome_en": "Music Festival",
+      "cenario_prompt": "Music festival portable toilet area at night, colorful stage lights in background, young man walking toward row of portable toilets, muddy ground, anxious expression, crowd silhouettes",
+      "dor": "Banheiro químico em evento, situação extrema"
+    },
+    {
+      "nome_pt": "Academia",
+      "nome_en": "Gym",
+      "cenario_prompt": "Modern gym locker room with wooden benches, athletic man post-workout sitting near lockers, towel over shoulder, bright overhead lighting, clean but public space atmosphere",
+      "dor": "Pós-treino, precisa se sentir limpo antes de seguir o dia"
+    }
+  ],
+  "formatos_video": [
+    {
+      "id": "grupo_de_apoio",
+      "nome": "Grupo de Apoio",
+      "descricao": "Paródia de reunião de Alcoólicos Anônimos",
+      "duracao": "45-60 segundos",
+      "personagens": [
+        {"nome": "João", "idade": "40s", "perfil": "Nervoso, suando, hesitante"},
+        {"nome": "Pedro", "idade": "30s", "perfil": "Traumatizado, olhar perdido"},
+        {"nome": "Carlos", "idade": "50s", "perfil": "Robusto, grande, emocional"},
+        {"nome": "Líder", "idade": "45-55", "perfil": "Sereno, de terno, autoritário mas acolhedor"}
+      ],
+      "estilo_visual": "Dimly lit support group room with metal folding chairs arranged in circle, warm desaturated color grading, handheld camera with subtle movement, cinematic 35mm look, moody side lighting creating dramatic shadows"
+    },
+    {
+      "id": "documentario",
+      "nome": "Documentário",
+      "descricao": "Mockumentary estilo Werner Herzog",
+      "duracao": "30-45 segundos",
+      "estilo_visual": "Documentary style with natural lighting, wide establishing shots, slow contemplative pacing, desaturated earthy tones, steady camera with occasional slow push-in, voice-over narration style"
+    },
+    {
+      "id": "depoimento",
+      "nome": "Depoimento",
+      "descricao": "Avatar IA falando para câmera, estilo UGC premium",
+      "duracao": "15-30 segundos",
+      "estilo_visual": "Shallow depth of field bokeh background, subject centered in frame, warm natural window light from side, authentic UGC aesthetic but premium quality, eye-level camera angle"
+    },
+    {
+      "id": "product_demo",
+      "nome": "Product Demo",
+      "descricao": "Close no produto, sem pessoa",
+      "duracao": "5-15 segundos",
+      "estilo_visual": "Clean studio setup with dark surface, 3-point lighting with strong key light from side, slow smooth camera movement, product centered, shallow depth of field, premium commercial aesthetic"
+    }
+  ],
+  "direcoes_cinematograficas": {
+    "formato": "9:16 vertical",
+    "resolucao": "1080x1920",
+    "fps": 24,
+    "cameras": [
+      "Slow dolly in",
+      "Handheld sutil",
+      "Static wide",
+      "Close-up rack focus"
+    ],
+    "iluminacao": [
+      "Warm desaturated",
+      "Key light lateral",
+      "Abraçar sombras"
+    ],
+    "color_grading": "Desaturated teal/orange, estilo Fincher/Ozark/Mindhunter",
+    "evitar": [
+      "Whip pans",
+      "Dutch angles",
+      "Drone shots"
+    ]
+  },
+  "composicao_final": {
+    "logo": {
+      "posicao": "Canto inferior direito",
+      "tamanho": "~12% da largura",
+      "opacidade": 0.9,
+      "fundo": "Semi-transparente"
+    },
+    "texto_tela": {
+      "fonte": "Sans-serif bold caixa alta",
+      "cor": "Branco com drop shadow",
+      "posicao": "Centro inferior"
+    },
+    "card_final": {
+      "obrigatorio": true,
+      "conteudo": "Logo + tagline",
+      "duracao": "3-5 segundos",
+      "fundo": "Preto"
+    },
+    "produto_referencia": {
+      "usar_sempre": true,
+      "path": "assets/referencias/embalagem_jose_wipes_oficial-removebg-preview.png",
+      "instrucao": "Em toda cena que mostra o produto, fazer upload da imagem oficial e passar como input_images/reference_image para o modelo. Isso garante que o pacote José Wipes apareça consistente em todos os vídeos."
+    }
+  },
+  "concorrente_referencia": {
+    "nome": "Dude Wipes",
+    "pais": "EUA",
+    "copiar": "Tom de humor, estilo de comunicação masculina",
+    "nao_copiar": "Excesso escatológico"
+  },
+  "restricoes": {
+    "nunca_mostrar": [
+      "Uso real do produto",
+      "Conteúdo escatológico explícito",
+      "Nudez",
+      "Rostos humanos reais (tudo avatar IA)",
+      "Cores na identidade de marca"
+    ],
+    "sempre_incluir": [
+      "O produto em algum momento",
+      "Tagline ou slogan no final",
+      "Logo durante o vídeo",
+      "Formato 9:16",
+      "Tom humorístico"
+    ]
+  }
+}

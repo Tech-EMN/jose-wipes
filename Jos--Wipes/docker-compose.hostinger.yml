@@ -1,0 +1,54 @@
+services:
+  jose-wipes:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      HF_API_KEY: ${HF_API_KEY}
+      HF_API_SECRET: ${HF_API_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_PLANNER_MODEL: ${OPENAI_PLANNER_MODEL:-gpt-5.4-pro}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      GOOGLE_SERVICE_ACCOUNT_FILE: ${GOOGLE_SERVICE_ACCOUNT_FILE:-}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      TZ: ${TZ:-America/Sao_Paulo}
+      PYTHONUNBUFFERED: ${PYTHONUNBUFFERED:-1}
+      PORT: "8000"
+    volumes:
+      - jose_wipes_output:/app/output
+      - jose_wipes_logs:/app/logs
+      # Uncomment after creating the credential file on the VPS host.
+      # - ${GOOGLE_SERVICE_ACCOUNT_HOST_PATH}:/app/credentials/service-account.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - traefik-proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.services.jose-wipes.loadbalancer.server.port=8000
+      - traefik.http.routers.jose-wipes-http.rule=Host(`${TRAEFIK_HOST:-studio.seudominio.com}`)
+      - traefik.http.routers.jose-wipes-http.entrypoints=web
+      - traefik.http.routers.jose-wipes-http.middlewares=jose-wipes-https-redirect
+      - traefik.http.middlewares.jose-wipes-https-redirect.redirectscheme.scheme=https
+      - traefik.http.routers.jose-wipes.rule=Host(`${TRAEFIK_HOST:-studio.seudominio.com}`)
+      - traefik.http.routers.jose-wipes.entrypoints=websecure
+      - traefik.http.routers.jose-wipes.tls=true
+      - traefik.http.routers.jose-wipes.tls.certresolver=letsencrypt
+      - traefik.http.routers.jose-wipes.middlewares=jose-wipes-auth
+      - traefik.http.middlewares.jose-wipes-auth.basicauth.users=${TRAEFIK_BASIC_AUTH_USERS:-disabled:$$apr1$$9dYh3W41$$m2r7JQYfG6L4lU8m1Kx8U1}
+
+networks:
+  traefik-proxy:
+    external: true
+
+volumes:
+  jose_wipes_output:
+    name: jose_wipes_output
+  jose_wipes_logs:
+    name: jose_wipes_logs

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jose Wipes Web Video Studio</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="hero-brand">
+        <img src="/assets/logo/Logo_josé_wipes.png" alt="José Wipes" class="hero-logo" />
+        <p class="brand-name">José Wipes</p>
+      </div>
+      <h1>Web Video Studio V2</h1>
+      <p class="subtitle">
+        Crie um anuncio com OpenAI, Higgsfield e ElevenLabs a partir de um prompt,
+        imagens de referencia da marca e, opcionalmente, de um roteiro em PDF.
+      </p>
+    </section>
+
+    <section class="panel health-panel">
+      <div class="status-header">
+        <div>
+          <p class="eyebrow">Conectividade Externa</p>
+          <h2>Pronto para enviar?</h2>
+        </div>
+        <span id="health-badge" class="badge">checking</span>
+      </div>
+
+      <p id="external-summary" class="status-copy">
+        Validando OpenAI, Higgsfield, ElevenLabs e FFmpeg antes do envio...
+      </p>
+      <p id="runtime-note" class="hint">
+        Para teste real, use o runner oficial: <code>python -m scripts.web_server start</code>
+      </p>
+      <ul id="health-list" class="health-list"></ul>
+    </section>
+
+    <!-- ===== REFERÊNCIAS VISUAIS DA MARCA ===== -->
+    <section class="panel references-panel">
+      <p class="eyebrow">Referencias Visuais da Marca</p>
+      <h2>Imagens de referencia para o video</h2>
+      <p class="hint ref-intro">
+        Arraste ou clique para adicionar imagens. A embalagem sera usada como referencia visual
+        na geracao do video. A logo pode ser aplicada como marca d'agua no video final.
+      </p>
+
+      <div class="ref-grid">
+        <!-- Embalagem -->
+        <div class="ref-slot" id="ref-slot-embalagem">
+          <label class="ref-label">Embalagem do Produto</label>
+          <div class="ref-drop-zone" id="drop-embalagem" data-ref-type="embalagem">
+            <div class="ref-placeholder">
+              <span class="ref-icon">📦</span>
+              <span class="ref-text">Arraste a imagem da embalagem aqui</span>
+            </div>
+            <img class="ref-preview-img hidden" id="preview-embalagem" alt="Embalagem" />
+            <button type="button" class="ref-remove hidden" id="remove-embalagem" title="Remover">✕</button>
+          </div>
+          <input type="file" class="ref-file-input" id="file-embalagem" accept="image/*" />
+          <p class="ref-hint">Usada como referencia visual na IA de video</p>
+        </div>
+
+        <!-- Logo -->
+        <div class="ref-slot" id="ref-slot-logo">
+          <label class="ref-label">Logo da Marca</label>
+          <div class="ref-drop-zone" id="drop-logo" data-ref-type="logo">
+            <div class="ref-placeholder">
+              <span class="ref-icon">🎨</span>
+              <span class="ref-text">Arraste a logo aqui</span>
+            </div>
+            <img class="ref-preview-img hidden" id="preview-logo" alt="Logo" />
+            <button type="button" class="ref-remove hidden" id="remove-logo" title="Remover">✕</button>
+          </div>
+          <input type="file" class="ref-file-input" id="file-logo" accept="image/*" />
+          <div class="ref-option">
+            <input type="checkbox" id="logo-overlay-check" name="apply_logo_overlay" checked />
+            <label for="logo-overlay-check">Aplicar logo como marca d'agua no video</label>
+          </div>
+        </div>
+
+        <!-- Cores da Marca -->
+        <div class="ref-slot" id="ref-slot-cores">
+          <label class="ref-label">Cores da Marca</label>
+          <div class="ref-drop-zone" id="drop-cores" data-ref-type="cores">
+            <div class="ref-placeholder">
+              <span class="ref-icon">🎯</span>
+              <span class="ref-text">Arraste imagem com as cores da marca</span>
+            </div>
+            <img class="ref-preview-img hidden" id="preview-cores" alt="Cores" />
+            <button type="button" class="ref-remove hidden" id="remove-cores" title="Remover">✕</button>
+          </div>
+          <input type="file" class="ref-file-input" id="file-cores" accept="image/*" />
+          <p class="ref-hint">Usada como contexto de paleta de cores para a IA</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== FORMULÁRIO PRINCIPAL ===== -->
+    <section class="panel">
+      <form id="job-form" class="form">
+        <label>
+          <span>Resolucao</span>
+          <select name="resolution" required>
+            <option value="720p">720p</option>
+            <option value="1080p" selected>1080p</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Orientacao</span>
+          <select name="orientation" required>
+            <option value="vertical" selected>Vertical</option>
+            <option value="horizontal">Horizontal</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Duracao</span>
+          <select name="duration_seconds" required>
+            <option value="10">10 segundos</option>
+            <option value="30" selected>30 segundos</option>
+            <option value="60">60 segundos</option>
+          </select>
+        </label>
+
+        <label class="full">
+          <span>Prompt do anuncio</span>
+          <textarea
+            name="prompt"
+            rows="5"
+            required
+            placeholder="Ex.: Quero um anuncio premium e engracado do Jose Wipes para homens que viajam muito e passam por banheiros de aeroporto."
+          ></textarea>
+        </label>
+
+        <label class="full">
+          <span>Roteiro em PDF (opcional, ate {{ max_pdf_mb }} MB)</span>
+          <input type="file" name="script_pdf" accept="application/pdf,.pdf" />
+        </label>
+
+        <label>
+          <span>Qualidade da IA de Video</span>
+          <select name="video_model" id="video-model-select" required>
+            <option value="seedance_1_5_pro">⚡ Padrao — Seedance 1.5 Pro</option>
+            <option value="kling_3_0" selected>🎬 Realista — Kling 3.0</option>
+            <option value="veo_3_1">👑 Ultra-Profissional — Veo 3.1</option>
+          </select>
+          <p class="field-hint" id="model-hint">
+            Kling 3.0 oferece alto fotorrealismo com otimo custo-beneficio.
+          </p>
+        </label>
+
+        <div class="actions full">
+          <button id="submit-button" type="submit" disabled>Gerar video</button>
+          <p id="form-message" class="hint"></p>
+          <p id="submit-guard" class="hint"></p>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel status-panel">
+      <div class="status-header">
+        <div>
+          <p class="eyebrow">Status do Job</p>
+          <h2 id="job-title">Nenhum job enviado ainda</h2>
+        </div>
+        <span id="job-badge" class="badge">idle</span>
+      </div>
+
+      <p id="job-progress" class="status-copy">Preencha o formulario e envie um job para comecar.</p>
+      <p id="job-enhanced" class="enhanced"></p>
+      <ul id="warnings-list" class="warnings"></ul>
+      <p id="job-error" class="error"></p>
+      <p id="job-error-meta" class="hint error-meta"></p>
+
+      <div id="result-container" class="result hidden">
+        <video id="preview-video" controls playsinline></video>
+        <a id="download-link" class="download-link" href="#" download>Baixar video final</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+services:
+  jose-wipes:
+    build: .
+    container_name: jose-wipes-studio
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./output:/app/output
+      - ./logs:/app/logs
+      - ./assets:/app/assets
+    restart: always

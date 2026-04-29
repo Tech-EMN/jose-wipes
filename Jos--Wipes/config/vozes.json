@@ -1,0 +1,46 @@
+{
+  "narrador": {
+    "nome": "Bill - Narrador Épico de Trailer",
+    "descricao": "Voz grave, sábia, madura. Tom de trailer de cinema. Pausas dramáticas.",
+    "voice_id": "pqHfZKP75CvOlQylNhV4",
+    "settings": {
+      "stability": 0.3,
+      "similarity_boost": 0.9,
+      "style": 0.55,
+      "speed": 0.82
+    }
+  },
+  "joao": {
+    "nome": "Roger - Casual e Natural",
+    "descricao": "Voz laid-back, casual, ressonante. Perfeito para confissões naturais.",
+    "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+    "settings": {
+      "stability": 0.35,
+      "similarity_boost": 0.85,
+      "style": 0.5,
+      "speed": 0.88
+    }
+  },
+  "lider": {
+    "nome": "Chris - Charmoso e Confiante",
+    "descricao": "Down-to-earth, charmoso. Voz confiante mas acolhedora.",
+    "voice_id": "iP95p4xoKVk53GoZ742B",
+    "settings": {
+      "stability": 0.45,
+      "similarity_boost": 0.85,
+      "style": 0.4,
+      "speed": 0.9
+    }
+  },
+  "amigo": {
+    "nome": "Liam - Energético e Jovem",
+    "descricao": "Voz jovem, energética, estilo social media. Bom para reações e falas rápidas.",
+    "voice_id": "TX3LPaxmHKxFdv7VOQHJ",
+    "settings": {
+      "stability": 0.35,
+      "similarity_boost": 0.8,
+      "style": 0.55,
+      "speed": 0.95
+    }
+  }
+}

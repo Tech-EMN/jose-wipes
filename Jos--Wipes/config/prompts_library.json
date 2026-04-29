@@ -1,0 +1,254 @@
+{
+  "meta": {
+    "versao": "1.0",
+    "total_prompts": 17,
+    "total_testados": 0,
+    "data_criacao": "2026-04-07"
+  },
+  "video": {
+    "grupo_de_apoio": [
+      {
+        "id": "vid_ga_01",
+        "nome": "A Confissão",
+        "prompt": "A nervous middle-aged Brazilian man in his 40s wearing a wrinkled dress shirt slowly stands up from a metal folding chair in a dimly lit support group meeting room. Beads of sweat visible on his forehead, hands trembling slightly. Circle of men seated around him on folding chairs. Warm desaturated color grading with teal and orange tones, handheld camera with subtle movement, cinematic 35mm film look. Moody side lighting from a single overhead practical light creates dramatic shadows across his face. The room has concrete walls and a single window with blinds casting stripe shadows. 9:16 portrait format",
+        "modelo_recomendado": "wan/2.5",
+        "modelo_alternativo": "google/veo/3.1/standard",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "1080p", "duration": 8},
+        "notas_tecnicas": "WAN 2.5 melhor para lip_sync. Especificar expressão facial ajuda na qualidade. Evitar texto no prompt.",
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      },
+      {
+        "id": "vid_ga_02",
+        "nome": "Reação do Grupo",
+        "prompt": "Cinematic montage of close-up reaction shots of three different men in a dimly lit support group room. First man drops his jaw in disbelief, second man slowly shakes his head in denial with closed eyes, third man covers his mouth with both hands in shock. Each face dramatically lit from the side with warm tungsten light, deep shadows on opposite side. Desaturated color palette with teal undertones. Shallow depth of field with blurred folding chairs in background. Handheld camera with micro movements. Film grain texture. 9:16 portrait format",
+        "modelo_recomendado": "google/veo/3.1/standard",
+        "modelo_alternativo": "wan/2.5",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "1080p", "duration": 6},
+        "notas_tecnicas": "VEO 3.1 para B-roll de reações. Montagem de close-ups funciona bem com este modelo.",
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      },
+      {
+        "id": "vid_ga_03",
+        "nome": "Histórias de Horror",
+        "prompt": "Two Brazilian men sitting in metal folding chairs in a dimly lit support group circle, sharing traumatic stories. First man in his 30s with a distant traumatized look, leaning forward with elbows on knees. Second man in his 50s, large and robust, visibly trembling as he speaks, wiping his eye with the back of his hand. Warm desaturated cinematography with deep shadows, single practical overhead light creating pools of light and darkness. Handheld camera slowly moving between the two men. Concrete walls with peeling paint. Cinematic 35mm film grain. 9:16 portrait format",
+        "modelo_recomendado": "wan/2.5",
+        "modelo_alternativo": "google/veo/3.1/standard",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "1080p", "duration": 10},
+        "notas_tecnicas": "Cena mais longa, WAN 2.5 para expressividade. Duas pessoas no frame é mais desafiador.",
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      },
+      {
+        "id": "vid_ga_04",
+        "nome": "A Esperança",
+        "prompt": "A serene distinguished man in his late 40s wearing a well-tailored dark suit stands up slowly and confidently from his chair in a dimly lit support group room. He walks calmly toward a nervous younger man, places his hand firmly on the younger man's shoulder in a reassuring gesture. Then reaches into his blazer inside pocket and pulls out the reference product package, matching the reference image exactly, a white wet wipes package with bold black typography and shield logo with mountain wave symbol, holding it up with quiet authority. Warm cinematic lighting with golden key light from the side, deep shadows, desaturated teal and orange color grading. Slow dolly movement following the standing man. 35mm film look with subtle grain. 9:16 portrait format",
+        "modelo_recomendado": "wan/2.5",
+        "modelo_alternativo": "google/veo/3.1/standard",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "1080p", "duration": 10},
+        "notas_tecnicas": "Cena crucial — o reveal do produto. WAN 2.5 para ação e interação entre personagens.",
+        "usar_imagem_produto": true,
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      },
+      {
+        "id": "vid_ga_05",
+        "nome": "Punchline",
+        "prompt": "Extreme close-up of the reference product package, matching the reference image exactly, a white wet wipes package with bold black typography and shield logo with mountain wave symbol, sitting on a dark textured surface. Dramatic single spotlight from above creating a halo effect around the package. Deep black background fading to complete darkness at edges. Premium product photography aesthetic with sharp focus on the package and soft light falloff. Subtle light reflection on the matte white surface. Studio-quality lighting with strong contrast between light and shadow. Clean minimal composition. 9:16 portrait format",
+        "modelo_recomendado": "bytedance/seedream/v4/text-to-image",
+        "modelo_alternativo": "google/veo/3.1/standard",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "2K"},
+        "notas_tecnicas": "Imagem estática convertida em vídeo com Ken Burns. Seedream para máxima qualidade de produto.",
+        "usar_imagem_produto": true,
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      }
+    ],
+    "documentario": [
+      {
+        "id": "vid_doc_01",
+        "nome": "Abertura",
+        "prompt": "Wide establishing shot of a Brazilian urban neighborhood at dusk. Low concrete buildings with warm lights beginning to turn on in windows. Power lines crossing the darkening sky with deep orange and purple sunset colors. A few silhouetted figures walking on a narrow street below. Documentary style steady camera with very slow push-in movement. Desaturated warm color palette with earthy tones. Natural ambient lighting mixing with artificial street lights. Contemplative atmospheric mood. Film grain texture. 9:16 portrait format",
+        "modelo_recomendado": "google/veo/3.1/standard",
+        "modelo_alternativo": "google/veo/3.1/fast",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "1080p", "duration": 6},
+        "notas_tecnicas": "VEO 3.1 standard para máxima qualidade de B-roll paisagem.",
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      },
+      {
+        "id": "vid_doc_02",
+        "nome": "Banheiro de Estádio",
+        "prompt": "Documentary-style shot of the entrance to a public stadium bathroom in Brazil. Long queue of men visible from behind, some shifting weight impatiently. Harsh overhead fluorescent tubes casting unflattering greenish-white light. Worn tile walls with water stains. A sign above the door partially visible. One man near the front looking back over his shoulder with a concerned expression. Steady handheld camera at eye level. Desaturated documentary color grading with muted colors. Natural sound design aesthetic. 9:16 portrait format",
+        "modelo_recomendado": "google/veo/3.1/standard",
+        "modelo_alternativo": "wan/2.5",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "1080p", "duration": 8},
+        "notas_tecnicas": "B-roll documental. VEO 3.1 para cenas sem diálogo.",
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      }
+    ],
+    "depoimento": [
+      {
+        "id": "vid_dep_01",
+        "nome": "Homem Jovem",
+        "prompt": "A young Brazilian man approximately 28 years old sitting in a modern apartment, speaking directly to camera in a confessional UGC style. He wears a casual fitted t-shirt, has short dark hair and light stubble. Warm natural light coming from a large window to his left creating soft shadows on the right side of his face. Beautiful bokeh background with blurred apartment interior, plants and warm-toned decor. Shallow depth of field at f/1.8. Camera at eye level on a tripod with slight micro-movements. Authentic premium UGC aesthetic. Skin tones warm and natural. 9:16 portrait format",
+        "modelo_recomendado": "wan/2.5",
+        "modelo_alternativo": "google/veo/3.1/standard",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "1080p", "duration": 10},
+        "notas_tecnicas": "WAN 2.5 para lip_sync. Depoimento direto para câmera.",
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      }
+    ],
+    "product_demo": [
+      {
+        "id": "vid_prod_01",
+        "nome": "Hero Shot Rotação",
+        "prompt": "Smooth slow 180-degree rotation of the reference product package, matching the reference image exactly, a white wet wipes package with bold black typography and shield logo with mountain wave symbol, centered on a dark polished wooden surface. Three-point studio lighting setup with strong key light from the left creating defined shadows, fill light from right at half intensity, and rim light from behind creating edge definition. Deep dark background with subtle gradient. Reflection of the package visible on the polished surface. Ultra-smooth turntable rotation. Commercial product photography in motion. Clean premium aesthetic. 9:16 portrait format",
+        "modelo_recomendado": "google/veo/3.1/standard",
+        "modelo_alternativo": "bytedance/seedance/pro",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "1080p", "duration": 6},
+        "notas_tecnicas": "VEO 3.1 para rotação suave de produto. Alternativa: gerar imagem e animar.",
+        "usar_imagem_produto": true,
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      },
+      {
+        "id": "vid_prod_02",
+        "nome": "Sachê na Estrada",
+        "prompt": "The reference product package, matching the reference image exactly, a white wet wipes package with bold black typography and shield logo with mountain wave symbol, placed on the dashboard of a truck cabin. Through the windshield, a long straight Brazilian highway stretches into the distance during golden hour. Warm sunset light flooding through the glass creating lens flares and warm glow on the package. Rack focus transition from the blurred highway background to sharp focus on the package in the foreground. Dust particles visible in the warm light. Dashboard texture visible. Cinematic shallow depth of field. 9:16 portrait format",
+        "modelo_recomendado": "google/veo/3.1/standard",
+        "modelo_alternativo": "google/veo/3.1/fast",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "1080p", "duration": 6},
+        "notas_tecnicas": "Rack focus é desafiador para IA. Se falhar, usar foco fixo no produto.",
+        "usar_imagem_produto": true,
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      },
+      {
+        "id": "vid_prod_03",
+        "nome": "Mão Segurando",
+        "prompt": "A masculine hand with clean short nails firmly holding the reference product package, matching the reference image exactly, a white wet wipes package with bold black typography and shield logo with mountain wave symbol, at chest height. The hand and package are in sharp focus in the foreground. Behind, a blurred urban Brazilian street scene with pedestrians and buildings creating beautiful bokeh. Natural daylight with subtle warm tones. The grip is confident and casual. Slight vignette on the edges. Commercial lifestyle photography aesthetic with cinematic quality. 9:16 portrait format",
+        "modelo_recomendado": "bytedance/seedream/v4/text-to-image",
+        "modelo_alternativo": "google/veo/3.1/standard",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "2K"},
+        "notas_tecnicas": "Imagem estática para Ken Burns. Seedream para detalhes de mão e produto.",
+        "usar_imagem_produto": true,
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      }
+    ],
+    "transicao": [
+      {
+        "id": "vid_trans_01",
+        "nome": "Card Final",
+        "prompt": "The reference product package, matching the reference image exactly, a white wet wipes package with bold black typography and shield logo with mountain wave symbol, perfectly centered on a pure black background. Single dramatic spotlight from directly above creating a pool of light around the package with soft light falloff into darkness. Subtle reflection on the glossy black surface below. Clean minimal composition with plenty of negative space above for text overlay. Premium product hero shot aesthetic with high contrast between the white package and black surroundings. Studio quality lighting. 9:16 portrait format",
+        "modelo_recomendado": "bytedance/seedream/v4/text-to-image",
+        "modelo_alternativo": "google/veo/3.1/standard",
+        "parametros": {"aspect_ratio": "9:16", "resolution": "2K"},
+        "notas_tecnicas": "Card final obrigatório. Imagem estática + Ken Burns + overlay de texto e áudio.",
+        "usar_imagem_produto": true,
+        "score": 0,
+        "score_notas": "",
+        "testado_em": ""
+      }
+    ]
+  },
+  "imagem": [
+    {
+      "id": "img_01",
+      "nome": "Product Shot Fundo Branco",
+      "prompt": "Professional e-commerce product photography of the reference product package, matching the reference image exactly, a white wet wipes package with bold black typography and shield logo with mountain wave symbol, on a pure white seamless background. Flat even lighting from all sides eliminating all shadows. Package perfectly centered and straight. Ultra-clean commercial style with no distractions. High resolution sharp focus on every detail of the packaging including text and logo. Minimal clean aesthetic suitable for online store listing. Professional studio shot. 1:1 square format",
+      "modelo_recomendado": "bytedance/seedream/v4/text-to-image",
+      "modelo_alternativo": "bytedance/seedream/v4/text-to-image",
+      "parametros": {"aspect_ratio": "1:1", "resolution": "2K"},
+      "notas_tecnicas": "E-commerce style. Fundo branco puro, sem sombras.",
+      "usar_imagem_produto": true,
+      "score": 0,
+      "score_notas": "",
+      "testado_em": ""
+    },
+    {
+      "id": "img_02",
+      "nome": "Product Shot Fundo Escuro",
+      "prompt": "Premium product photography of the reference product package, matching the reference image exactly, a white wet wipes package with bold black typography and shield logo with mountain wave symbol, on a dark rough concrete surface. Strong key light from the left side creating dramatic shadows and highlighting the white package against the dark background. Subtle rim light from behind. Dark moody atmosphere with cinematic teal undertones. Sharp focus on the package with shallow depth of field blurring the background edges. Premium masculine aesthetic. High contrast. 9:16 portrait format",
+      "modelo_recomendado": "bytedance/seedream/v4/text-to-image",
+      "modelo_alternativo": "bytedance/seedream/v4/text-to-image",
+      "parametros": {"aspect_ratio": "9:16", "resolution": "2K"},
+      "notas_tecnicas": "Estilo premium/dark. Key light lateral para drama.",
+      "usar_imagem_produto": true,
+      "score": 0,
+      "score_notas": "",
+      "testado_em": ""
+    },
+    {
+      "id": "img_03",
+      "nome": "Lifestyle Estádio",
+      "prompt": "A confident Brazilian man in his 30s wearing a casual jersey walking through a football stadium concourse. He has a white wet wipes package subtly visible in his back jeans pocket. The stadium crowd is blurred in the background with warm amber floodlights creating a dramatic atmosphere. He walks with purpose and confidence. Shallow depth of field focusing on the man. Warm desaturated color grading. Cinematic lifestyle photography. Natural crowd ambiance feeling. 9:16 portrait format",
+      "modelo_recomendado": "bytedance/seedream/v4/text-to-image",
+      "modelo_alternativo": "bytedance/seedream/v4/text-to-image",
+      "parametros": {"aspect_ratio": "9:16", "resolution": "2K"},
+      "notas_tecnicas": "Lifestyle com produto sutil. Não focar no produto, focar na confiança.",
+      "score": 0,
+      "score_notas": "",
+      "testado_em": ""
+    },
+    {
+      "id": "img_04",
+      "nome": "Lifestyle Aeroporto",
+      "prompt": "A well-dressed Brazilian businessman in his 30s walking confidently through a modern airport terminal. He holds a white wet wipes package casually in one hand alongside his phone. Bright clean airport lighting with large glass windows showing aircraft in the background. Other travelers blurred in the background. Sharp focus on the man. Clean modern aesthetic with cool tones and occasional warm highlights. Professional lifestyle photography with commercial quality. 9:16 portrait format",
+      "modelo_recomendado": "bytedance/seedream/v4/text-to-image",
+      "modelo_alternativo": "bytedance/seedream/v4/text-to-image",
+      "parametros": {"aspect_ratio": "9:16", "resolution": "2K"},
+      "notas_tecnicas": "Lifestyle aeroporto. Homem confiante com produto na mão.",
+      "score": 0,
+      "score_notas": "",
+      "testado_em": ""
+    },
+    {
+      "id": "img_05",
+      "nome": "Meme Comparação",
+      "prompt": "Split screen comparison image with a vertical dividing line. Left side shows a sad lonely single roll of cheap toilet paper on a dirty bathroom floor with harsh fluorescent overhead lighting, depressing atmosphere, cold blue-green color cast. Right side shows a premium white wet wipes package with bold black typography and shield logo on a dark polished surface with warm dramatic studio lighting, golden highlights, premium luxury atmosphere. The contrast between the two sides is stark and humorous. Clean graphic composition. 9:16 portrait format",
+      "modelo_recomendado": "bytedance/seedream/v4/text-to-image",
+      "modelo_alternativo": "bytedance/seedream/v4/text-to-image",
+      "parametros": {"aspect_ratio": "9:16", "resolution": "2K"},
+      "notas_tecnicas": "Meme visual. Contraste entre triste e premium. Split screen pode ser desafiador para IA.",
+      "score": 0,
+      "score_notas": "",
+      "testado_em": ""
+    }
+  ],
+  "modificadores": {
+    "estilos_camera": {
+      "cinematografico_35mm": "Shot on 35mm film with natural grain texture, shallow depth of field at f/1.4, warm color rendition, anamorphic lens characteristics with subtle barrel distortion",
+      "documentario_handheld": "Handheld documentary camera with subtle organic movement, slight breathing motion, eye-level perspective, naturalistic framing with occasional reframing",
+      "comercial_limpo": "Clean steady commercial camera work on a dolly or slider, perfectly smooth movement, precise framing, professional broadcast quality, no visible camera artifacts",
+      "noturno_dramatico": "Low-light cinematography with high ISO grain, available light only from practical sources, deep shadows with crushed blacks, moody atmospheric night shooting style"
+    },
+    "iluminacao": {
+      "fluorescente_institucional": "Harsh overhead fluorescent tube lighting casting unflattering greenish-white light, visible tube reflections on surfaces, institutional feeling, no warmth",
+      "golden_hour": "Warm golden hour sunlight streaming from a low angle, long soft shadows, warm orange and amber tones wrapping around subjects, natural lens flares",
+      "spotlight_dramatico": "Single dramatic spotlight from above or side creating a pool of light surrounded by darkness, strong contrast, theatrical feeling, inspired by Caravaggio",
+      "luz_natural_janela": "Soft natural window light from one side creating gentle gradient of light to shadow across the subject, warm daylight color temperature, peaceful intimate feeling"
+    },
+    "color_grading": {
+      "fincher": "David Fincher style color grading with desaturated teal and sickly green undertones, crushed shadows, cool clinical feeling, slight yellow in highlights, low saturation",
+      "documentario_cru": "Minimal color grading with natural true-to-life colors, slight desaturation, no stylistic push, honest documentary feeling, neutral white balance",
+      "preto_branco_alto_contraste": "High contrast black and white with deep pure blacks and bright whites, minimal midtones, dramatic graphic quality, strong silhouettes and shapes",
+      "vintage_70s": "Vintage 1970s film stock look with faded warm tones, lifted blacks with brownish cast, slight magenta shift in shadows, soft halation on highlights, muted greens"
+    }
+  }
+}
