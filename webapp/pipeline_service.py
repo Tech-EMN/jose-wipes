@@ -19,11 +19,62 @@ from scripts.gerador_midia import (
     gerar_audio_elevenlabs,
     gerar_video_higgsfield,
 )
+from scripts.integration_errors import IntegrationFailure
 from webapp.model_registry import VideoModelConfig
 from webapp.schemas import CreateJobRequest, PlannerOutput
 
 
 ProgressCallback = Callable[[str, str], None]
+
+
+def _gerar_video_com_fallback(
+    model_config: VideoModelConfig,
+    prompt: str,
+    *,
+    aspecto: str,
+    resolucao: str,
+    duracao: int,
+    output_path: str,
+    reference_image_url: str | None,
+    extra_arguments: dict,
+) -> "Path | None":
+    """Call gerar_video_higgsfield with automatic fallback on model_not_found."""
+    import logging
+    _log = logging.getLogger(__name__)
+
+    applications = [model_config.application]
+    if model_config.fallback_application:
+        applications.append(model_config.fallback_application)
+
+    last_exc: IntegrationFailure | None = None
+    for app in applications:
+        try:
+            result = gerar_video_higgsfield(
+                app,
+                prompt,
+                aspecto=aspecto,
+                resolucao=resolucao,
+                duracao=duracao,
+                output_path=output_path,
+                reference_image_url=reference_image_url,
+                extra_arguments=extra_arguments,
+                raise_on_failure=True,
+            )
+            return result
+        except IntegrationFailure as exc:
+            last_exc = exc
+            if exc.code == "model_not_found" and app != applications[-1]:
+                _log.warning(
+                    "Modelo '%s' não encontrado na conta Higgsfield; tentando fallback '%s'.",
+                    app,
+                    applications[applications.index(app) + 1],
+                )
+                continue
+            raise
+
+    if last_exc is not None:
+        raise last_exc
+    return None
 
 VIDEO_DIMENSIONS = {
     ("vertical", "720p"): (720, 1280),
@@ -142,8 +193,8 @@ def render_planned_video(
             )
 
         base_path = cenas_dir / f"shot_{shot.shot_number:02d}"
-        video_path = gerar_video_higgsfield(
-            model_config.application,
+        video_path = _gerar_video_com_fallback(
+            model_config,
             shot.visual_prompt_en,
             aspecto=aspect_ratio,
             resolucao=request.resolution,
@@ -151,7 +202,6 @@ def render_planned_video(
             output_path=f"{base_path}.mp4",
             reference_image_url=reference_image_url if should_use_reference else None,
             extra_arguments=model_config.default_arguments,
-            raise_on_failure=True,
         )
         if not video_path:
             raise RuntimeError(
