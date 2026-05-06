@@ -38,7 +38,7 @@ class ProductOverlayConfig(BaseModel):
 
     ativo: bool = False
     posicao: Literal["centro", "centro_inferior", "direita", "esquerda"] = "centro"
-    tamanho_pct: int = Field(default=35, ge=15, le=75)
+    tamanho_pct: int = Field(default=55, ge=15, le=75)
     inicio_seg: float | None = Field(default=None, ge=0)
 
 
