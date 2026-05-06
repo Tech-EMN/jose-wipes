@@ -158,19 +158,19 @@ def _normalize_overlay_position(value: object) -> str:
         normalized = value.strip().lower()
         if normalized in ALLOWED_PRODUCT_POSITIONS:
             return normalized
-    return "centro_inferior"
+    return "centro"
 
 
 def _normalize_overlay_size(value: object) -> int:
     if isinstance(value, bool):
-        return 35
+        return 55
     try:
         numeric = float(value)
     except (TypeError, ValueError):
-        return 35
+        return 55
 
     if not math.isfinite(numeric):
-        return 35
+        return 55
     return max(15, min(75, int(round(numeric))))
 
 
@@ -277,7 +277,7 @@ def plan_web_video(
                     "product_overlay": {
                         "ativo": True,
                         "posicao": "centro|centro_inferior|direita|esquerda",
-                        "tamanho_pct": 35,
+                        "tamanho_pct": 55,
                         "inicio_seg": 0,
                     },
                     "notes": "string",
@@ -367,8 +367,8 @@ def plan_web_video(
             update={
                 "product_overlay": ProductOverlayConfig(
                     ativo=True,
-                    posicao="centro_inferior",
-                    tamanho_pct=max(last_shot.product_overlay.tamanho_pct, 40),
+                    posicao="centro",
+                    tamanho_pct=max(last_shot.product_overlay.tamanho_pct, 55),
                     inicio_seg=last_shot.product_overlay.inicio_seg,
                 )
             }
