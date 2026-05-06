@@ -41,7 +41,7 @@ def normalizar_cena(input_path, output_path, largura=1080, altura=1920, fps=24):
     )
     has_audio = '"codec_type"' in probe.stdout
 
-    vf = f"scale={largura}:{altura}:force_original_aspect_ratio=decrease,pad={largura}:{altura}:(ow-iw)/2:(oh-ih)/2,fps={fps}"
+    vf = f"scale={largura}:{altura}:force_original_aspect_ratio=increase,crop={largura}:{altura},fps={fps}"
 
     cmd = ["ffmpeg", "-y", "-i", str(input_path), "-vf", vf,
            "-c:v", "libx264", "-pix_fmt", "yuv420p"]
