@@ -4,6 +4,7 @@ Carrega variáveis de ambiente, define paths e funções utilitárias.
 """
 
 import os
+import re
 import sys
 import json
 from pathlib import Path
@@ -144,6 +145,28 @@ def carregar_vozes():
         return json.load(f)
 
 
+_PRONUNCIACAO_PT_BR = (
+    # Marca: garantir "uáipes" em vez de leitura literal "ui-pes"/"vi-pes"
+    (re.compile(r"\bjos[éeÉE]\s+wipes\b", re.IGNORECASE), "Jozê uáipes"),
+    (re.compile(r"\bjos[éeÉE]\s+u[aá]ipes\b", re.IGNORECASE), "Jozê uáipes"),
+    (re.compile(r"\bwipes\b", re.IGNORECASE), "uáipes"),
+)
+
+
+def normalizar_pronuncia_pt(texto: str) -> str:
+    """Substitui palavras com pronúncia problemática por grafia fonética em pt-BR.
+
+    O ElevenLabs (eleven_multilingual_v2) lê "Wipes" como "vi-pes" ou "ui-pes"
+    em vozes pt-BR. Forçamos a grafia fonética antes de enviar.
+    """
+    if not texto:
+        return texto
+    resultado = texto
+    for padrao, substituicao in _PRONUNCIACAO_PT_BR:
+        resultado = padrao.sub(substituicao, resultado)
+    return resultado
+
+
 def gerar_audio(persona, texto, output_path):
     """Gera áudio MP3 usando ElevenLabs com os settings da persona. Retorna True/False."""
     try:
@@ -171,9 +194,11 @@ def gerar_audio(persona, texto, output_path):
             style=settings.get("style", 0.0),
         )
 
+        texto_falado = normalizar_pronuncia_pt(texto)
+
         audio = client.text_to_speech.convert(
             voice_id=voice_id,
-            text=texto,
+            text=texto_falado,
             model_id="eleven_multilingual_v2",
             output_format="mp3_44100_128",
             voice_settings=voice_settings,

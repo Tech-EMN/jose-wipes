@@ -29,6 +29,36 @@ PLANNER_MODEL = OPENAI_PLANNER_MODEL
 SHOT_BLOCK_SECONDS = 5
 ALLOWED_PRODUCT_POSITIONS = {"centro", "centro_inferior", "direita", "esquerda"}
 
+# Palavras por segundo confortáveis para o ElevenLabs multilingual em pt-BR
+# considerando pausas dramáticas — ~2.0 wps mantém a fala dentro do shot.
+NARRATION_WORDS_PER_SECOND = 2.0
+# Reservamos 0.6s no fim do shot pra evitar corte de áudio mesmo com pad.
+NARRATION_TAIL_RESERVE_SECONDS = 0.6
+# Quando há personagem com gesto/embalagem na mão, atrasamos o overlay.
+PRODUCT_OVERLAY_HAND_DELAY_SECONDS = 2.0
+PRODUCT_OVERLAY_HAND_KEYWORDS = (
+    "raises",
+    "raising",
+    "lifts",
+    "lifting",
+    "holds up",
+    "holding up",
+    "extends",
+    "extending",
+    "reveals",
+    "revealing",
+    "pulls out",
+    "pulling out",
+    "presents",
+    "presenting",
+    "hands extended",
+    "hands raised",
+    "hand reaches",
+    "reaching",
+    "showing the",
+    "shows the",
+)
+
 
 def _strip_json_fences(text: str) -> str:
     text = text.strip()
@@ -53,11 +83,31 @@ def _expected_shot_count(duration_seconds: int) -> int:
     return duration_seconds // SHOT_BLOCK_SECONDS
 
 
-def _planner_system_prompt() -> str:
+def _planner_system_prompt(*, orientation: str = "vertical") -> str:
+    is_vertical = orientation == "vertical"
+    aspect_ratio = "9:16" if is_vertical else "16:9"
+    aspect_label = "vertical" if is_vertical else "horizontal"
+    composition_hint = (
+        "composicao VERTICAL com sujeito centralizado, headroom curto, planos fechados/medios"
+        if is_vertical
+        else "composicao HORIZONTAL cinematografica em widescreen, com headroom equilibrado"
+    )
+    aspect_tail = (
+        f"cinematic {aspect_ratio} {aspect_label} frame, "
+        "shot on Arri Alexa, anamorphic bokeh, dramatic rim lighting, "
+        "film grain, shallow depth of field"
+    )
+    max_words = _max_narration_words(SHOT_BLOCK_SECONDS)
     return (
         "Voce e uma cineasta, diretora criativa e planejadora tecnica do estudio web Jose Wipes.\n"
         "Sua especialidade e criar videos curtos que prendem atencao e performam bem em formatos curtos.\n"
         "Sua funcao e melhorar anuncios em portugues e devolver um plano JSON estrito para video curto.\n"
+        "\n"
+        f"## FORMATO DO VIDEO\n"
+        f"- Orientacao: {aspect_label} ({aspect_ratio}).\n"
+        f"- {composition_hint}.\n"
+        f"- SEMPRE terminar o prompt visual com: '{aspect_tail}'.\n"
+        f"- NUNCA mencione outro aspect ratio diferente de {aspect_ratio} no prompt visual.\n"
         "\n"
         "## ESTILO CINEMATOGRAFICO\n"
         "Cada shot e filmado em estilo de cinema premium:\n"
@@ -66,7 +116,6 @@ def _planner_system_prompt() -> str:
         "- Iluminacao: chiaroscuro, rim light dramatico, flares naturais, luz volumetrica\n"
         "- Movimento: dolly shots lentos, steadicam, rack focus, slow motion sutil\n"
         "- Textura: film grain 35mm, profundidade de campo rasa (f/1.4), anamorphic bokeh\n"
-        "- SEMPRE terminar o prompt visual com: 'cinematic 9:16 vertical frame, shot on Arri Alexa, anamorphic bokeh, dramatic rim lighting, film grain, shallow depth of field'\n"
         "\n"
         "## RITMO DE TRAILER CURTO\n"
         "- Shot 1: HOOK — impacto imediato nos primeiros 1-2 segundos, pattern interrupt\n"
@@ -81,13 +130,24 @@ def _planner_system_prompt() -> str:
         "- SEMPRE especificar idade, tipo fisico, roupa e expressao facial dos personagens\n"
         "- NUNCA incluir texto renderizado ou nome 'Jose Wipes' no prompt visual\n"
         "- Em cenas com produto, descrever como 'white wet wipes package with bold black typography and shield logo'\n"
-        "- Quando product_overlay.ativo for true e o shot tiver personagem, descreva o personagem com MAOS VAZIAS estendidas — o pipeline compoe o produto real depois\n"
+        "- Quando product_overlay.ativo for true e o shot tiver personagem, descreva o personagem com MAOS VAZIAS subindo/erguendo/estendendo nos primeiros 2 segundos — o pipeline compoe o produto real DEPOIS desse gesto\n"
         "- Em product shots, incluir 'matching the reference product package exactly' no prompt\n"
         "\n"
         "## REFERENCIA VISUAL DO PRODUTO\n"
         "O pipeline injeta automaticamente a imagem real da embalagem Jose Wipes via reference_image_urls (Soul Mode da Higgsfield).\n"
         "Em cenas com product_overlay ativo, NUNCA descreva um pacote especifico no prompt — a IA geraria um pacote generico que conflita com o real.\n"
         "Em vez disso, descreva a cena e o personagem, e o pipeline cuida de sobrepor o produto real.\n"
+        "\n"
+        "## NARRACAO E SINCRONIA\n"
+        f"- Cada shot tem {SHOT_BLOCK_SECONDS}s. Narracao em portugues deve caber confortavelmente, com pausa final.\n"
+        f"- Limite duro: ate {max_words} palavras em `narration_text_pt` por shot (idealmente 7-{max_words}).\n"
+        "- Frases curtas, com punch. Use reticencias '...' para indicar respiracao quando precisar.\n"
+        "- Evite numeros longos ou siglas dificeis. Quando precisar dizer a marca, escreva 'José uáipes' (grafia fonetica) em narration_text_pt — assim a IA de voz pronuncia certo. Em overlay_text use 'José Wipes' normal.\n"
+        "\n"
+        "## TIMING DO PRODUTO\n"
+        "- Quando o shot mostra um personagem com gesto (mao subindo, erguendo, estendendo, revelando), defina `product_overlay.inicio_seg` >= 2.0 para o produto aparecer SO DEPOIS do gesto se completar.\n"
+        "- Quando o shot for um close de produto sem personagem (mesa, prateleira, fundo escuro), `inicio_seg` pode ser 0 ou 0.5.\n"
+        "- Evite que a embalagem entre antes do ato de revelar — o pipeline nao tem como corrigir isso depois.\n"
         "\n"
         "## BORDOES E TAGLINES\n"
         "NUNCA repita o mesmo bordao. Para cada video, INVENTE uma tagline NOVA e impactante, com peso de frase de trailer.\n"
@@ -109,6 +169,67 @@ def _planner_system_prompt() -> str:
         "- `product_overlay.tamanho_pct` deve ficar entre 15 e 75.\n"
         "- `product_overlay.inicio_seg` deve ser maior ou igual a 0.\n"
         "- `overlay_text` deve ser curto, legivel na tela e bom para retencao.\n"
+    )
+
+
+def _max_narration_words(shot_duration_seconds: int) -> int:
+    """Maximo de palavras que cabem confortavelmente no shot considerando reserva no fim."""
+    speakable = max(1.0, shot_duration_seconds - NARRATION_TAIL_RESERVE_SECONDS)
+    return max(3, int(speakable * NARRATION_WORDS_PER_SECOND))
+
+
+def _trim_narration_to_fit(text: str, shot_duration_seconds: int) -> str:
+    """Garante que a narracao caiba no shot. Corta em fronteira de palavra/pontuacao."""
+    if not text:
+        return text
+    words = text.split()
+    limit = _max_narration_words(shot_duration_seconds)
+    if len(words) <= limit:
+        return text
+    trimmed = words[:limit]
+    # Tenta terminar em pontuacao para nao soar truncado
+    for idx in range(len(trimmed) - 1, max(len(trimmed) - 4, -1), -1):
+        if trimmed[idx].endswith((".", "!", "?", ",", "...")):
+            trimmed = trimmed[: idx + 1]
+            break
+    else:
+        trimmed[-1] = trimmed[-1].rstrip(",;:") + "."
+    return " ".join(trimmed)
+
+
+def _shot_descreve_gesto(shot: PlannerShot) -> bool:
+    """Detecta se o shot envolve gesto de revelar/erguer (mao subindo, etc)."""
+    haystack = " ".join(
+        part.lower()
+        for part in (shot.visual_prompt_en or "", shot.notes or "")
+        if part
+    )
+    if not haystack:
+        return False
+    return any(keyword in haystack for keyword in PRODUCT_OVERLAY_HAND_KEYWORDS)
+
+
+def _ajustar_overlay_para_gesto(shot: PlannerShot) -> PlannerShot:
+    """Atrasa o overlay do produto quando o shot tem gesto de revelar."""
+    if not shot.product_overlay.ativo:
+        return shot
+    if not _shot_descreve_gesto(shot):
+        return shot
+    inicio_atual = shot.product_overlay.inicio_seg or 0.0
+    if inicio_atual >= PRODUCT_OVERLAY_HAND_DELAY_SECONDS:
+        return shot
+    # Nao ultrapassar a duracao do shot menos uma cauda visivel
+    teto = max(0.5, shot.duration_seconds - 1.0)
+    novo_inicio = min(PRODUCT_OVERLAY_HAND_DELAY_SECONDS, teto)
+    return shot.model_copy(
+        update={
+            "product_overlay": ProductOverlayConfig(
+                ativo=True,
+                posicao=shot.product_overlay.posicao,
+                tamanho_pct=shot.product_overlay.tamanho_pct,
+                inicio_seg=novo_inicio,
+            )
+        }
     )
 
 
@@ -291,7 +412,7 @@ def plan_web_video(
     raw_text = create_text_response(
         client=client,
         model=PLANNER_MODEL,
-        instructions=_planner_system_prompt(),
+        instructions=_planner_system_prompt(orientation=request.orientation),
         user_input=json.dumps(user_payload, ensure_ascii=False),
         max_output_tokens=max_output_tokens,
     )
@@ -326,11 +447,15 @@ def plan_web_video(
 
     normalized_shots: list[PlannerShot] = []
     for index, shot in enumerate(plan.shots, start=1):
+        trimmed_narration = _trim_narration_to_fit(
+            shot.narration_text_pt, SHOT_BLOCK_SECONDS
+        )
         normalized_shots.append(
             shot.model_copy(
                 update={
                     "shot_number": index,
                     "duration_seconds": SHOT_BLOCK_SECONDS,
+                    "narration_text_pt": trimmed_narration,
                 }
             )
         )
@@ -356,6 +481,11 @@ def plan_web_video(
             normalized_with_product.append(shot)
 
     plan = plan.model_copy(update={"shots": normalized_with_product})
+
+    # Atrasa o overlay quando o shot tem gesto de revelar/erguer
+    plan = plan.model_copy(
+        update={"shots": [_ajustar_overlay_para_gesto(shot) for shot in plan.shots]}
+    )
 
     last_shot = plan.shots[-1]
     if not last_shot.overlay_text:
