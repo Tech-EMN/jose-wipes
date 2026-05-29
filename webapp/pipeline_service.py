@@ -12,7 +12,7 @@ from scripts.compositor import (
     compor_video_final,
     overlay_produto,
 )
-from scripts.config import obter_logo_path, obter_url_imagem_produto
+from scripts.config import obter_url_imagem_produto
 from scripts.product_reference import prompt_pede_referencia_produto
 from scripts.gerador_midia import (
     combinar_video_audio,
@@ -166,14 +166,10 @@ def render_planned_video(
             except Exception as exc:
                 warnings.append(f"Referência visual do produto indisponível: {exc}")
 
-    # Determine the logo to use for the final video
-    # Priority: user-uploaded logo > default logo
+    # Only apply logo overlay when the user explicitly uploaded a logo
     logo_path_to_use = None
-    if apply_logo_overlay:
-        if ref_logo_path and Path(ref_logo_path).exists():
-            logo_path_to_use = Path(ref_logo_path)
-        else:
-            logo_path_to_use = obter_logo_path()
+    if apply_logo_overlay and ref_logo_path and Path(ref_logo_path).exists():
+        logo_path_to_use = Path(ref_logo_path)
 
     # Determine product overlay image
     # Priority: user-uploaded embalagem > default product
