@@ -27,6 +27,44 @@ def log(msg):
     print(f"  [{ts}] {msg}")
 
 
+def _detectar_crop_sem_letterbox(input_path, sample_seconds=4):
+    """Detecta barras pretas (letterbox/pillarbox) e retorna 'W:H:X:Y' ou None.
+
+    Alguns modelos (Kling, Veo) renderizam 9:16 com letterbox embutido quando
+    interpretam mal o aspect_ratio. Roda cropdetect amostrando o miolo do vídeo
+    pra remover essas barras antes de escalar.
+    """
+    try:
+        proc = _subprocess_run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-nostats",
+                "-ss", "0.5",
+                "-i", str(input_path),
+                "-t", str(sample_seconds),
+                "-vf", "cropdetect=24:2:0",
+                "-f", "null",
+                "-",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.SubprocessError:
+        return None
+
+    crop_value = None
+    for line in (proc.stderr or "").splitlines():
+        idx = line.find("crop=")
+        if idx == -1:
+            continue
+        candidate = line[idx + len("crop="):].split()[0].strip()
+        if candidate.count(":") == 3:
+            crop_value = candidate
+    return crop_value
+
+
 def normalizar_cena(input_path, output_path, largura=1080, altura=1920, fps=24):
     """Normaliza vídeo: resolução, fps, codec. Retorna path ou None."""
     input_path = Path(input_path)
@@ -41,7 +79,15 @@ def normalizar_cena(input_path, output_path, largura=1080, altura=1920, fps=24):
     )
     has_audio = '"codec_type"' in probe.stdout
 
-    vf = f"scale={largura}:{altura}:force_original_aspect_ratio=increase,crop={largura}:{altura},fps={fps}"
+    pre_crop = _detectar_crop_sem_letterbox(input_path)
+    pre_filter = f"crop={pre_crop}," if pre_crop else ""
+    if pre_crop:
+        log(f"Letterbox detectado, removendo barras: {pre_crop}")
+
+    vf = (
+        f"{pre_filter}scale={largura}:{altura}:force_original_aspect_ratio=increase,"
+        f"crop={largura}:{altura},setsar=1,fps={fps}"
+    )
 
     cmd = ["ffmpeg", "-y", "-i", str(input_path), "-vf", vf,
            "-c:v", "libx264", "-pix_fmt", "yuv420p"]
@@ -273,11 +319,24 @@ def overlay_produto(video_path, output_path, produto_path=None,
     }
     pos = pos_map.get(posicao, pos_map["centro"])
 
-    # Escalar produto para % da largura do vídeo, com fade in
-    scale_filter = f"[1:v]scale=iw*{tamanho_pct}/100:-1[prod]"
-    if inicio_seg is not None:
-        overlay_filter = f"[0:v][prod]overlay={pos}:enable='gte(t,{inicio_seg})':format=auto[out]"
+    # Escalar produto para % da largura do vídeo, com fade in suave a partir de inicio_seg
+    fade_dur = max(0.0, float(fade_in or 0.0))
+    if inicio_seg is not None and float(inicio_seg) > 0:
+        start = float(inicio_seg)
+        if fade_dur > 0:
+            scale_filter = (
+                f"[1:v]scale=iw*{tamanho_pct}/100:-1,format=rgba,"
+                f"fade=t=in:st={start}:d={fade_dur}:alpha=1[prod]"
+            )
+        else:
+            scale_filter = (
+                f"[1:v]scale=iw*{tamanho_pct}/100:-1,format=rgba[prod]"
+            )
+        overlay_filter = (
+            f"[0:v][prod]overlay={pos}:enable='gte(t,{start})':format=auto[out]"
+        )
     else:
+        scale_filter = f"[1:v]scale=iw*{tamanho_pct}/100:-1[prod]"
         overlay_filter = f"[0:v][prod]overlay={pos}:format=auto[out]"
 
     filter_complex = f"{scale_filter};{overlay_filter}"

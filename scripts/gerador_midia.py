@@ -205,22 +205,75 @@ def gerar_audio_elevenlabs(persona, texto, output_path):
         return None
 
 
-def combinar_video_audio(video_path, audio_path, output_path):
-    """Combina vídeo + áudio com FFmpeg. Retorna path ou None."""
+def _probe_duration_seconds(path):
+    """Retorna a duração em segundos via ffprobe, ou None se falhar."""
+    try:
+        proc = _subprocess_run(
+            [
+                "ffprobe", "-v", "quiet",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        text = (proc.stdout or "").strip()
+        if not text:
+            return None
+        return float(text)
+    except (subprocess.SubprocessError, ValueError):
+        return None
+
+
+def combinar_video_audio(video_path, audio_path, output_path, max_extra_seconds=2.5):
+    """Combina vídeo + áudio com FFmpeg, estendendo o vídeo se o áudio for maior.
+
+    Se a narração for um pouco mais longa que o shot (ex.: 5.4s em um shot de 5s),
+    congelamos o último frame em vez de cortar o áudio no meio da fala. Limitamos
+    a extensão para evitar pausas estranhamente longas.
+    """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     log(f"Combinando vídeo + áudio...")
 
-    try:
-        _subprocess_run([
-            "ffmpeg", "-y",
-            "-i", str(video_path),
-            "-i", str(audio_path),
+    video_dur = _probe_duration_seconds(video_path)
+    audio_dur = _probe_duration_seconds(audio_path)
+
+    extra = 0.0
+    if video_dur is not None and audio_dur is not None and audio_dur > video_dur:
+        extra = min(audio_dur - video_dur + 0.2, max_extra_seconds)
+        log(
+            f"  Áudio ({audio_dur:.2f}s) maior que vídeo ({video_dur:.2f}s); "
+            f"congelando último frame por +{extra:.2f}s"
+        )
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        "-i", str(audio_path),
+    ]
+
+    if extra > 0:
+        # Re-encoda o vídeo com tpad para clonar o último frame
+        cmd += [
+            "-filter_complex",
+            f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.2f},setsar=1[v]",
+            "-map", "[v]", "-map", "1:a:0",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-shortest",
+        ]
+    else:
+        cmd += [
             "-c:v", "copy", "-c:a", "aac",
             "-map", "0:v:0", "-map", "1:a:0",
             "-shortest",
-            str(output_path)
-        ], capture_output=True, text=True, check=True, timeout=120)
+        ]
+
+    cmd.append(str(output_path))
+
+    try:
+        _subprocess_run(cmd, capture_output=True, text=True, check=True, timeout=180)
         log(f"✓ Combinado: {output_path}")
         return output_path
     except subprocess.CalledProcessError as e:
