@@ -10,9 +10,10 @@ from scripts.compositor import (
     adicionar_logo_overlay,
     adicionar_texto_overlay,
     compor_video_final,
+    gerar_card_logo,
     overlay_produto,
 )
-from scripts.config import obter_url_imagem_produto
+from scripts.config import obter_path_imagem_produto, obter_url_imagem_produto
 from scripts.product_reference import prompt_pede_referencia_produto
 from scripts.gerador_midia import (
     combinar_video_audio,
@@ -256,6 +257,33 @@ def render_planned_video(
                 )
 
         rendered_scenes.append(str(current_video_path))
+
+    # Card final com a logo/embalagem real da marca sobre fundo branco limpo
+    card_image_path = None
+    if ref_logo_path and Path(ref_logo_path).exists():
+        card_image_path = Path(ref_logo_path)
+    elif ref_embalagem_path and Path(ref_embalagem_path).exists():
+        card_image_path = Path(ref_embalagem_path)
+    else:
+        default_product = obter_path_imagem_produto()
+        if default_product and Path(default_product).exists():
+            card_image_path = Path(default_product)
+
+    if card_image_path:
+        if progress_cb:
+            progress_cb("composing", "Gerando card final com a logo da marca...")
+        card_final_path = final_dir / "card_final_logo.mp4"
+        card_video = gerar_card_logo(
+            card_final_path,
+            card_image_path,
+            duracao=3,
+            largura=largura,
+            altura=altura,
+        )
+        if card_video:
+            rendered_scenes.append(str(card_video))
+        else:
+            warnings.append("Não foi possível gerar o card final com a logo enviada.")
 
     if progress_cb:
         progress_cb("composing", "Compondo vídeo final e aplicando marca da empresa...")

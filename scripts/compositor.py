@@ -417,6 +417,38 @@ def gerar_card_final_com_produto(output_path, produto_path=None, duracao=4,
             return None
 
 
+def gerar_card_logo(output_path, logo_path, duracao=3, largura=1080, altura=1920, fundo="white"):
+    """Gera card final limpo com a logo/embalagem real da marca sobre fundo neutro."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    logo_path = Path(logo_path)
+
+    if not logo_path.exists():
+        log(f"Imagem não encontrada para card final ({logo_path})")
+        return None
+
+    fps = 24
+    logo_width = int(largura * 0.80)
+
+    try:
+        _subprocess_run([
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", f"color={fundo}:s={largura}x{altura}:d={duracao}:r={fps}",
+            "-i", str(logo_path),
+            "-filter_complex",
+            f"[1:v]scale={logo_width}:-1,format=rgba[logo];[0:v][logo]overlay=(W-w)/2:(H-h)/2:format=auto[out]",
+            "-map", "[out]",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-t", str(duracao),
+            str(output_path)
+        ], capture_output=True, text=True, check=True, timeout=60)
+        log(f"✓ Card logo: {output_path.name}")
+        return output_path
+    except subprocess.CalledProcessError as e:
+        log(f"✗ Card logo falhou: {e.stderr[:200]}")
+        return None
+
+
 def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
                        largura=1080, altura=1920, fps=24, output_dir=None):
     """Pipeline completo: normalizar → concatenar → logo → exportar. Retorna path ou None."""
