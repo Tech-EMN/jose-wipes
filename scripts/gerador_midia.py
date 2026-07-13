@@ -116,17 +116,10 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
                     break
                 elif isinstance(status, Failed):
                     log("Geração falhou")
-                    last_failure = IntegrationFailure(
-                        service="higgsfield",
+                    error_msg = getattr(status, "message", None) or str(status)
+                    last_failure = classify_higgsfield_exception(
+                        RuntimeError(error_msg),
                         stage="generating",
-                        code="generation_failed",
-                        user_message="A Higgsfield não conseguiu concluir a geração do vídeo.",
-                        technical_message="Status Failed retornado durante o polling.",
-                        retryable=True,
-                        auth_confirmed=True,
-                        submit_confirmed=True,
-                        render_confirmed=False,
-                        reason="generation_failed",
                     )
                     break
 

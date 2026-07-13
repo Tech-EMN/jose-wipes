@@ -39,7 +39,7 @@ def _gerar_video_com_fallback(
     reference_image_url: str | None,
     extra_arguments: dict,
 ) -> "Path | None":
-    """Call gerar_video_higgsfield with automatic fallback on model_not_found."""
+    """Call gerar_video_higgsfield with automatic fallback on failure."""
     import logging
     _log = logging.getLogger(__name__)
 
@@ -60,13 +60,14 @@ def _gerar_video_com_fallback(
                 reference_image_url=reference_image_url,
                 extra_arguments=extra_arguments,
                 raise_on_failure=True,
+                max_retries=0,
             )
             return result
         except IntegrationFailure as exc:
             last_exc = exc
-            if exc.code == "model_not_found" and app != applications[-1]:
+            if app != applications[-1]:
                 _log.warning(
-                    "Modelo '%s' não encontrado na conta Higgsfield; tentando fallback '%s'.",
+                    "Modelo '%s' falhou; tentando fallback '%s'.",
                     app,
                     applications[applications.index(app) + 1],
                 )
