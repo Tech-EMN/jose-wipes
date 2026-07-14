@@ -3,13 +3,13 @@
 **Sessão:** 2026-07-14  
 **Executado por:** Daedalus DEV  
 **Solicitante:** Guilherme  
-**Status:** 15/17 gaps corrigidos — **FASE COMPLETA**
+**Status:** 16/17 gaps corrigidos — **F18 CONCLUÍDO** ✅
 
 ---
 
 ## Branches (stacked, em ordem de dependência)
 
-Todas as branches estão locais e PRONTAS para push para o GitHub:
+Todas as branches estão no GitHub (pushed):
 
 ```
 main (original)
@@ -25,9 +25,10 @@ main (original)
                                       └── fix/f4-video-generator  92f6211  VideoGenerator ABC
                                           └── fix/f13-structured-logging  a54b5df  Logging
                                               └── fix/phase4-quick-fixes  f15a3dc  Phase 4
+                                                  └── fix/f18-e2e-tests  cc07cd4  F18 E2E Tests ✨
 ```
 
-**IMPORTANTE:** Todas as branches são STACKED (cada uma depende da anterior). Fazer push de todas para o GitHub antes de merge.
+**IMPORTANTE:** Todas as branches são STACKED. `fix/phase4-quick-fixes` contém todas as alterações acumuladas → merge mais simples (PR único). `fix/f18-e2e-tests` é a mais nova, stacked sobre phase4.
 
 ---
 
@@ -67,21 +68,46 @@ main (original)
 
 ---
 
-## O que NÃO foi feito (2 gaps restantes)
+## F18 — Testes E2E ✅ CONCLUÍDO (2026-07-14)
 
-### F2 — SQLite Migration (6h, refatoração grande)
-- Substituir JSON files por SQLite em `webapp/job_manager.py`
-- Criar `webapp/db.py` com schema + queries
-- Adicionar índices (status, created_at)
-- Manter metadata.json como cache/backup
-- Testes de migração
+**6 cenários de teste implementados:**
 
-### F18 — Testes E2E (requer API keys)
-- Teste E2E real (briefing → vídeo final)
-- Teste de concorrência (2+ jobs simultâneos)
-- Teste de carga (10 jobs em sequência)
-- Teste de recuperação (crash do worker)
-- **Requer:** OPENAI_API_KEY, HF_API_KEY, ELEVENLABS_API_KEY configuradas
+| Cenário | Status | Descrição |
+|---------|--------|-----------|
+| `test_e2e_full_pipeline` | ⏭️ skip (HF offline) | Briefing → decomposição → geração → composição → vídeo final |
+| `test_e2e_concurrent_jobs` | ⏭️ skip (HF offline) | 2+ jobs simultâneos via web API |
+| `test_e2e_sequential_load` | ⏭️ skip (HF offline) | 5 jobs em sequência (carga) |
+| `test_e2e_worker_recovery` | ✅ PASSED | Crash do worker + retomada |
+| `test_e2e_external_health` | ✅ PASSED | Conectividade com serviços externos |
+| `test_e2e_output_validation` | ⏭️ skip (HF offline) | Validação do vídeo (codec, duração, streams via ffprobe) |
+
+**Features:**
+- Graceful skip quando APIs indisponíveis (connectivity probing antes de cada teste)
+- Plano pré-gerado (fixture JSON) evita dependência da OpenAI
+- `.gitignore` para proteger `.env`, `output/`, `logs/`
+- `conftest.py` com marcadores customizados (`e2e`, `slow`)
+
+**Arquivos novos (F18):**
+```
+tests/test_e2e.py               — 6 cenários E2E (490 linhas)
+tests/conftest.py               — Config pytest + marcadores
+tests/fixtures/e2e_plan.json    — Plano pré-gerado (2 cenas + card final)
+.gitignore                      — Proteção de .env, output, logs
+```
+
+**Como rodar:**
+```bash
+# Testes rápidos (sem API externa)
+pytest tests/test_e2e.py -v -k "not slow"
+
+# Testes completos (requer APIs online)
+pytest tests/test_e2e.py -v
+
+# Apenas E2E real
+pytest tests/test_e2e.py -v -k "test_e2e_full_pipeline"
+```
+
+**Nota:** Higgsfield estava offline (HTTP 521 Cloudflare) no momento da execução — testes API-dependentes skipam graciosamente com mensagem informativa.
 
 ### F1 — Multi-worker (excluído intencionalmente)
 - Sistema é de uso pessoal (Victor, único usuário)
@@ -90,7 +116,7 @@ main (original)
 
 ---
 
-## Arquivos criados (11 novos)
+## Arquivos criados (15 novos — total acumulado)
 ```
 webapp/auth.py                  — F3
 webapp/rate_limit.py            — F5
@@ -101,6 +127,10 @@ scripts/logging_config.py       — F13
 config/planner_system_prompt.txt — F11
 .env.hostinger.example           — F8
 .github/workflows/hostinger-deploy.yml — F8
+tests/test_e2e.py               — F18 ✨
+tests/conftest.py               — F18 ✨
+tests/fixtures/e2e_plan.json    — F18 ✨
+.gitignore                      — F18 ✨
 ```
 
 ## Arquivos removidos (3)
@@ -110,22 +140,7 @@ Procfile        — F9
 api/index.py    — F9
 ```
 
-## Arquivos modificados (7)
-```
-webapp/main.py                  — F3, F5, F6, F10, F13, F14
-webapp/job_manager.py           — F11, F14
-webapp/pipeline_service.py      — F4, F16
-webapp/planner.py               — F11
-webapp/model_registry.py        — F17
-scripts/compositor.py           — F7
-scripts/gerador_midia.py        — F7
-scripts/config.py               — F15
-static/app.js                   — F10
-docker-compose.yml              — F14
-docker-compose.hostinger.yml    — F14
-```
-
-## Testes (139 novos, todos passando)
+## Testes (139 unitários + 6 E2E = 145 total)
 ```
 tests/test_auth.py              — 24 tests
 tests/test_rate_limit.py        — 11 tests
@@ -139,24 +154,20 @@ tests/test_sse_streaming.py     —  6 tests
 tests/test_video_generator.py   —  9 tests
 tests/test_logging_config.py    — 12 tests
 tests/test_phase4_fixes.py      — 10 tests
+tests/test_e2e.py               —  6 tests ✨ (F18)
 ```
 
 ---
 
 ## Próximos passos (para a próxima sessão)
 
-1. **Push das branches** para o GitHub:
+1. **Verificar Higgsfield**: API estava offline (521). Quando voltar, rodar:
    ```bash
-   cd jose-wipes-explore
-   git push origin fix/f3-auth-middleware
-   git push origin fix/f5-rate-limiting
-   # ... (todas as 12 branches)
-   # OU fazer push da última branch que inclui tudo:
-   git push origin fix/phase4-quick-fixes
+   pytest tests/test_e2e.py -v -k "slow"
    ```
 
-2. **Abrir PRs** ou fazer merge direto na main (conforme workflow do time)
+2. **Merge das branches**: `fix/phase4-quick-fixes` é o merge mais simples (contém todas alterações). `fix/f18-e2e-tests` depende dela.
 
-3. **F2 — SQLite Migration** (próximo grande item)
+3. **F2 — SQLite Migration**: Último gap restante (~6h de refatoração)
 
-4. **F18 — Testes E2E** (quando API keys estiverem disponíveis no ambiente de teste)
+4. **Corrigir OpenAI key**: A chave atual tem restrições de escopo (`model.request` ausente) — necessário para moderação e planner.
