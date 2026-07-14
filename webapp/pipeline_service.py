@@ -92,18 +92,54 @@ ASPECT_RATIO_BY_ORIENTATION = {
 
 
 def _upload_reference_image(image_path: str | Path | None) -> str | None:
-    """Upload a reference image to Higgsfield and return its URL."""
+    """Upload a reference image to Higgsfield and return its URL.
+
+    Retries with exponential backoff on transient failures:
+    - 3 attempts total
+    - Backoff: 2s → 4s → 8s
+    - Returns URL on success, None after all retries exhausted
+    """
+    import logging
+    import time
+
+    _log = logging.getLogger(__name__)
+
     if not image_path:
         return None
     path = Path(image_path)
     if not path.exists():
         return None
-    try:
-        import higgsfield_client
-        url = higgsfield_client.upload_file(str(path))
-        return url
-    except Exception:
-        return None
+
+    max_retries = 3
+    base_delay = 2.0
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            import higgsfield_client
+            url = higgsfield_client.upload_file(str(path))
+            if attempt > 1:
+                _log.info(
+                    "Reference image upload succeeded on attempt %d/%d",
+                    attempt, max_retries,
+                )
+            return url
+        except Exception as exc:
+            if attempt < max_retries:
+                delay = base_delay * (2 ** (attempt - 1))
+                _log.warning(
+                    "Reference image upload failed (attempt %d/%d): %s. "
+                    "Retrying in %.1fs...",
+                    attempt, max_retries, exc, delay,
+                )
+                time.sleep(delay)
+            else:
+                _log.error(
+                    "Reference image upload failed after %d attempts: %s",
+                    max_retries, exc,
+                )
+                return None
+
+    return None
 
 
 def render_planned_video(
