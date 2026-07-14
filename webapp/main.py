@@ -36,8 +36,17 @@ app.mount(
 
 @app.on_event("startup")
 def startup_event() -> None:
-    """Ensure the single background worker is ready."""
+    """Start the background worker only when running in single-container mode.
 
+    Set JW_SKIP_WORKER=true in the web container when using separate
+    web + worker services (production docker-compose).
+    """
+    import os
+    if os.getenv("JW_SKIP_WORKER", "").strip().lower() in {"true", "1", "yes"}:
+        import logging
+        _log = logging.getLogger("webapp.main")
+        _log.info("JW_SKIP_WORKER=true — web server running without background worker")
+        return
     job_manager.start()
 
 
