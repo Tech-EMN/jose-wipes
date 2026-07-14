@@ -15,8 +15,17 @@ from scripts.config import OUTPUT_DIR, ASSETS_DIR, obter_logo_path, obter_path_i
 _NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
+_DEFAULT_FFMPEG_TIMEOUT = int(os.getenv("JW_FFMPEG_TIMEOUT", "300"))
+
+
 def _subprocess_run(cmd, **kwargs):
-    """subprocess.run com CREATE_NO_WINDOW no Windows."""
+    """subprocess.run com CREATE_NO_WINDOW no Windows e timeout padrao.
+
+    Todas as chamadas FFmpeg recebem timeout=300s por padrao,
+    evitando que o worker bloqueie indefinidamente em video corrompido.
+    Configure JW_FFMPEG_TIMEOUT no .env para ajustar.
+    """
+    kwargs.setdefault("timeout", _DEFAULT_FFMPEG_TIMEOUT)
     if _NO_WINDOW:
         kwargs.setdefault("creationflags", _NO_WINDOW)
     return subprocess.run(cmd, **kwargs)
