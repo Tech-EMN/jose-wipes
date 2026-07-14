@@ -104,7 +104,31 @@ def carregar_brandbook():
 
 
 def obter_logo_path() -> Path:
-    """Retorna o path do logo da marca com fallback para variantes do nome do arquivo."""
+    """Retorna o path do logo da marca.
+
+    Prioridade:
+    1. Env var LOGO_PATH (caminho absoluto ou relativo ao PROJECT_ROOT)
+    2. Glob pattern logo*.png no diretório ASSETS_DIR/logo/
+    3. Fallback manual para variantes de nome conhecidas
+    """
+    # Priority 1: explicit env var
+    env_path = os.getenv("LOGO_PATH", "").strip()
+    if env_path:
+        candidate = Path(env_path)
+        if not candidate.is_absolute():
+            candidate = PROJECT_ROOT / candidate
+        if candidate.exists():
+            return candidate
+        print(f"  ⚠ LOGO_PATH={env_path} nao encontrado, usando fallback")
+
+    # Priority 2: glob pattern (most flexible)
+    logo_dir = ASSETS_DIR / "logo"
+    if logo_dir.exists():
+        matches = sorted(logo_dir.glob("logo*.png"))
+        if matches:
+            return matches[0]
+
+    # Priority 3: hardcoded fallbacks
     candidatos = [
         ASSETS_DIR / "logo" / "logo_jose_wipes.png",
         ASSETS_DIR / "logo" / "Logo_josé_wipes.png",

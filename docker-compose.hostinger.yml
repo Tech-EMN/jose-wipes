@@ -1,5 +1,6 @@
 services:
-  jose-wipes:
+  # Web server: FastAPI + frontend behind Traefik. Does NOT process jobs.
+  jose-wipes-web:
     build:
       context: .
       dockerfile: Dockerfile
@@ -15,6 +16,7 @@ services:
       TZ: ${TZ:-America/Sao_Paulo}
       PYTHONUNBUFFERED: ${PYTHONUNBUFFERED:-1}
       PORT: "8000"
+      JW_SKIP_WORKER: "true"
     volumes:
       - jose_wipes_output:/app/output
       - jose_wipes_logs:/app/logs
@@ -42,6 +44,31 @@ services:
       - traefik.http.routers.jose-wipes.tls.certresolver=letsencrypt
       - traefik.http.routers.jose-wipes.middlewares=jose-wipes-auth
       - traefik.http.middlewares.jose-wipes-auth.basicauth.users=${TRAEFIK_BASIC_AUTH_USERS:-disabled:$$apr1$$9dYh3W41$$m2r7JQYfG6L4lU8m1Kx8U1}
+
+  # Background worker: polls shared volume for new jobs.
+  jose-wipes-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: python -m webapp.worker
+    environment:
+      HF_API_KEY: ${HF_API_KEY}
+      HF_API_SECRET: ${HF_API_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_PLANNER_MODEL: ${OPENAI_PLANNER_MODEL:-gpt-5.4-pro}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      GOOGLE_SERVICE_ACCOUNT_FILE: ${GOOGLE_SERVICE_ACCOUNT_FILE:-}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      TZ: ${TZ:-America/Sao_Paulo}
+      PYTHONUNBUFFERED: ${PYTHONUNBUFFERED:-1}
+      JW_WORKER_POLL_INTERVAL: ${JW_WORKER_POLL_INTERVAL:-2}
+      JW_WORKER_GRACE: ${JW_WORKER_GRACE:-30}
+    volumes:
+      - jose_wipes_output:/app/output
+      - jose_wipes_logs:/app/logs
+      # Uncomment after creating the credential file on the VPS host.
+      # - ${GOOGLE_SERVICE_ACCOUNT_HOST_PATH}:/app/credentials/service-account.json:ro
 
 networks:
   traefik-proxy:

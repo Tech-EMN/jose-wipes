@@ -15,9 +15,15 @@ from scripts.integration_errors import IntegrationFailure, classify_higgsfield_e
 # Flag do Windows para não abrir janela de console
 _NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
+import os
+
+_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+_DEFAULT_FFMPEG_TIMEOUT = int(os.getenv("JW_FFMPEG_TIMEOUT", "300"))
+
 
 def _subprocess_run(cmd, **kwargs):
-    """subprocess.run com CREATE_NO_WINDOW no Windows."""
+    """subprocess.run com CREATE_NO_WINDOW no Windows e timeout padrao."""
+    kwargs.setdefault("timeout", _DEFAULT_FFMPEG_TIMEOUT)
     if _NO_WINDOW:
         kwargs.setdefault("creationflags", _NO_WINDOW)
     return subprocess.run(cmd, **kwargs)

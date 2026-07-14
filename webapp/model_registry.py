@@ -36,7 +36,10 @@ VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
             "HF_MODEL_SEEDANCE_1_5_PRO", "bytedance/seedance/pro"
         ),
         allowed_resolutions=("720p", "1080p"),
-        fallback_application="bytedance/seedance/v1/pro/text-to-video",
+        fallback_application=_env_or_default(
+            "HF_MODEL_SEEDANCE_1_5_PRO_FALLBACK",
+            "bytedance/seedance/v1/pro/text-to-video",
+        ),
         default_arguments={},
         fallback_note=(
             "Configure HF_MODEL_SEEDANCE_1_5_PRO no .env se a sua conta usar outro application ID."
@@ -50,7 +53,10 @@ VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
             "HF_MODEL_KLING_3_0", "kling/3.0"
         ),
         allowed_resolutions=("720p", "1080p"),
-        fallback_application="kling-video/v2.1/master/text-to-video",
+        fallback_application=_env_or_default(
+            "HF_MODEL_KLING_3_0_FALLBACK",
+            "kling-video/v2.1/master/text-to-video",
+        ),
         default_arguments={},
         fallback_note=(
             "Configure HF_MODEL_KLING_3_0 no .env se a sua conta usar outro application ID."
@@ -64,7 +70,10 @@ VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
             "HF_MODEL_VEO_3_1", "google/veo/3.1"
         ),
         allowed_resolutions=("720p", "1080p"),
-        fallback_application="google/veo/v3.1/text-to-video",
+        fallback_application=_env_or_default(
+            "HF_MODEL_VEO_3_1_FALLBACK",
+            "google/veo/v3.1/text-to-video",
+        ),
         default_arguments={},
         fallback_note=(
             "Configure HF_MODEL_VEO_3_1 no .env se a sua conta usar outro application ID."

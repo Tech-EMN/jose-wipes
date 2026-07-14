@@ -3,20 +3,26 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from scripts.config import PROJECT_ROOT
+from scripts.config import PROJECT_ROOT, LOGS_DIR
+from scripts.logging_config import configure_logging
 from scripts.external_health import probe_external_health
 from scripts.web_server import get_web_server_status, mark_external_connectivity_checked
+from webapp.auth import AuthMiddleware
 from webapp.job_manager import JobManager
+from webapp.moderation import moderate_prompt_sync
+from webapp.rate_limit import RateLimitMiddleware
 from webapp.pdf_utils import MAX_PDF_BYTES
 from webapp.schemas import CreateJobRequest
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB per image
 
 app = FastAPI(title="José Wipes Web Video Studio", version="2.0.0")
+app.add_middleware(AuthMiddleware)
+app.add_middleware(RateLimitMiddleware)
 job_manager = JobManager()
 
 templates = Jinja2Templates(directory=str(PROJECT_ROOT / "templates"))
@@ -31,8 +37,27 @@ app.mount(
 
 @app.on_event("startup")
 def startup_event() -> None:
-    """Ensure the single background worker is ready."""
+    """Start the background worker only when running in single-container mode.
 
+    Set JW_SKIP_WORKER=true in the web container when using separate
+    web + worker services (production docker-compose).
+    """
+    import os
+    import logging
+
+    # Configure structured logging before anything else
+    json_mode = os.getenv("JW_LOG_JSON", "").strip().lower() not in {"false", "0", "no"}
+    configure_logging(
+        level=os.getenv("JW_LOG_LEVEL", "INFO"),
+        json_output=json_mode,
+        log_dir=LOGS_DIR,
+    )
+    _log = logging.getLogger("webapp.main")
+    _log.info("José Wipes Web Studio v2.0.0 starting")
+
+    if os.getenv("JW_SKIP_WORKER", "").strip().lower() in {"true", "1", "yes"}:
+        _log.info("JW_SKIP_WORKER=true — web server running without background worker")
+        return
     job_manager.start()
 
 
@@ -114,6 +139,14 @@ async def create_job(
 ) -> JSONResponse:
     """Create a background job from the submitted web form."""
 
+    # Content safety check before any external API call
+    moderation = moderate_prompt_sync(prompt)
+    if not moderation.allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=moderation.reason or "Conteúdo bloqueado pela moderação.",
+        )
+
     try:
         request_model = CreateJobRequest.model_validate(
             {
@@ -181,6 +214,59 @@ def get_job_status(job_id: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return JSONResponse(status.model_dump())
+
+
+@app.get("/api/jobs/{job_id}/stream")
+async def stream_job_status(job_id: str, request: Request):
+    """Stream job status updates via Server-Sent Events.
+
+    Replaces polling — the client opens an EventSource and receives
+    updates whenever the job status changes. The stream ends when
+    the job reaches a terminal state (completed or failed).
+    """
+    import asyncio
+    import json
+
+    async def event_generator():
+        last_status = None
+        poll_interval = 1.0  # seconds between disk checks
+
+        try:
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    status = job_manager.get_job_status(job_id)
+                except FileNotFoundError:
+                    yield f"event: error\ndata: {{\"detail\": \"Job not found\"}}\n\n"
+                    break
+
+                current = status.model_dump()
+
+                # Only send if status changed
+                if current != last_status:
+                    last_status = current
+                    yield f"data: {json.dumps(current, ensure_ascii=False)}\n\n"
+
+                # Terminal states
+                if status.status in {"completed", "failed"}:
+                    break
+
+                await asyncio.sleep(poll_interval)
+        except asyncio.CancelledError:
+            pass
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/jobs/{job_id}/download")

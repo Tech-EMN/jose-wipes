@@ -16,7 +16,7 @@ from scripts.integration_errors import IntegrationFailure, build_generic_failure
 from webapp.model_registry import get_model_config
 from webapp.pdf_utils import extract_pdf_text
 from webapp.pipeline_service import render_planned_video
-from webapp.planner import plan_web_video
+from webapp.planner import plan_web_video, _prompt_content_hash
 from webapp.schemas import CreateJobRequest, JobStatusResponse
 
 
@@ -138,6 +138,7 @@ class JobManager:
             "failure_reason": None,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
+            "planner_prompt_hash": _prompt_content_hash(),
             "request": request.model_dump(),
             "script_pdf_path": str(pdf_path) if pdf_path else None,
             "ref_embalagem_path": ref_paths["embalagem"],
@@ -366,3 +367,101 @@ class JobManager:
         metadata = self._read_metadata(job_dir)
         metadata.update(changes)
         self._write_metadata(job_dir, metadata)
+
+
+class FilePollingJobManager(JobManager):
+    """Job manager that polls a shared filesystem for new jobs.
+
+    Designed for multi-container deployments where the web server
+    and worker run in separate containers with a shared volume.
+    The web container writes job metadata; the worker polls for
+    jobs with status "queued" and processes them.
+    """
+
+    def __init__(
+        self,
+        jobs_dir: Path | None = None,
+        poll_interval: int = 2,
+        planner_fn: PlannerFn | None = None,
+        renderer_fn: RendererFn | None = None,
+    ) -> None:
+        super().__init__(
+            jobs_dir=jobs_dir,
+            planner_fn=planner_fn,
+            renderer_fn=renderer_fn,
+        )
+        self._poll_interval = poll_interval
+        self._processed_jobs: set[str] = set()
+
+    def start(self) -> None:
+        """Start the polling worker thread."""
+        if self._worker and self._worker.is_alive():
+            return
+
+        self._stop_event.clear()
+        self._worker = threading.Thread(
+            target=self._run_polling_worker,
+            name="jose-wipes-file-worker",
+            daemon=False,  # Non-daemon so it survives parent process exit
+        )
+        self._worker.start()
+
+    def stop(self) -> None:
+        """Stop the polling worker thread."""
+        self._stop_event.set()
+        if self._worker and self._worker.is_alive():
+            self._worker.join(timeout=30)
+
+    def create_job(self, *args, **kwargs) -> dict[str, object]:
+        """Create a job. In file-polling mode, the worker will pick it up."""
+        return super().create_job(*args, **kwargs)
+
+    def _run_polling_worker(self) -> None:
+        """Main polling loop: scan for queued jobs, process them."""
+        import logging
+        _log = logging.getLogger(__name__)
+        _log.info(
+            "File-polling worker started (dir=%s, interval=%ds)",
+            self.jobs_dir, self._poll_interval,
+        )
+
+        while not self._stop_event.is_set():
+            try:
+                queued = self._discover_queued_jobs()
+                for job_id in queued:
+                    if self._stop_event.is_set():
+                        break
+                    if job_id in self._processed_jobs:
+                        continue
+                    _log.info("Processing job %s", job_id)
+                    try:
+                        self._process_job(job_id)
+                    except Exception:
+                        _log.exception("Job %s failed", job_id)
+                    finally:
+                        self._processed_jobs.add(job_id)
+            except Exception:
+                _log.exception("Polling iteration failed")
+
+            # Wait with interruptible sleep
+            self._stop_event.wait(timeout=self._poll_interval)
+
+        _log.info("File-polling worker stopped")
+
+    def _discover_queued_jobs(self) -> list[str]:
+        """Scan jobs_dir for jobs with status 'queued'."""
+        queued: list[str] = []
+        if not self.jobs_dir.exists():
+            return queued
+
+        for job_dir in sorted(self.jobs_dir.iterdir()):
+            if not job_dir.is_dir():
+                continue
+            try:
+                metadata = self._read_metadata(job_dir)
+                if metadata.get("status") == "queued":
+                    queued.append(job_dir.name)
+            except Exception:
+                continue
+
+        return queued

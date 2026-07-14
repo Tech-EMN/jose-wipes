@@ -84,6 +84,26 @@ def _expected_shot_count(duration_seconds: int) -> int:
 
 
 def _planner_system_prompt(*, orientation: str = "vertical") -> str:
+    """Load the planner system prompt from config/ and format with orientation params.
+
+    The prompt lives in config/planner_system_prompt.txt so it can be:
+    - versioned independently of code changes
+    - A/B tested without redeploy
+    - edited by non-developers
+
+    Returns the formatted prompt string.
+    """
+    from scripts.config import CONFIG_DIR
+
+    prompt_path = CONFIG_DIR / "planner_system_prompt.txt"
+    if not prompt_path.exists():
+        raise FileNotFoundError(
+            f"Planner system prompt not found at {prompt_path}. "
+            "Create config/planner_system_prompt.txt or restore from git."
+        )
+
+    template = prompt_path.read_text(encoding="utf-8")
+
     is_vertical = orientation == "vertical"
     aspect_ratio = "9:16" if is_vertical else "16:9"
     aspect_label = "vertical" if is_vertical else "horizontal"
@@ -98,78 +118,27 @@ def _planner_system_prompt(*, orientation: str = "vertical") -> str:
         "film grain, shallow depth of field"
     )
     max_words = _max_narration_words(SHOT_BLOCK_SECONDS)
-    return (
-        "Voce e uma cineasta, diretora criativa e planejadora tecnica do estudio web Jose Wipes.\n"
-        "Sua especialidade e criar videos curtos que prendem atencao e performam bem em formatos curtos.\n"
-        "Sua funcao e melhorar anuncios em portugues e devolver um plano JSON estrito para video curto.\n"
-        "\n"
-        f"## FORMATO DO VIDEO\n"
-        f"- Orientacao: {aspect_label} ({aspect_ratio}).\n"
-        f"- {composition_hint}.\n"
-        f"- SEMPRE terminar o prompt visual com: '{aspect_tail}'.\n"
-        f"- NUNCA mencione outro aspect ratio diferente de {aspect_ratio} no prompt visual.\n"
-        "\n"
-        "## ESTILO CINEMATOGRAFICO\n"
-        "Cada shot e filmado em estilo de cinema premium:\n"
-        "- Camera: shot on Arri Alexa Mini LF, lentes anamorficas Panavision\n"
-        "- Color grading: desaturado, teal & orange, contraste pesado, sombras profundas\n"
-        "- Iluminacao: chiaroscuro, rim light dramatico, flares naturais, luz volumetrica\n"
-        "- Movimento: dolly shots lentos, steadicam, rack focus, slow motion sutil\n"
-        "- Textura: film grain 35mm, profundidade de campo rasa (f/1.4), anamorphic bokeh\n"
-        "\n"
-        "## RITMO DE TRAILER CURTO\n"
-        "- Shot 1: HOOK — impacto imediato nos primeiros 1-2 segundos, pattern interrupt\n"
-        "- Shots intermediarios: TENSAO e BUILD-UP — progressao dramatica, contraste visual\n"
-        "- Ultimo shot: CLIMAX/REVELACAO — virada, produto, CTA com peso emocional\n"
-        "- Narracao estilo trailer: frases curtas, tom grave epico com ironia seca\n"
-        "\n"
-        "## REGRAS DE PROMPT VISUAL\n"
-        "- Prompts visuais SEMPRE em ingles\n"
-        "- Minimo 60 palavras por prompt visual\n"
-        "- SEMPRE incluir: sujeito + acao + ambiente + iluminacao + camera + estilo + aspecto\n"
-        "- SEMPRE especificar idade, tipo fisico, roupa e expressao facial dos personagens\n"
-        "- NUNCA incluir texto renderizado, nome 'Jose Wipes', nome da marca, tipografia ou logo no prompt visual — a IA de video alucinaria uma versao distorcida\n"
-        "- Quando product_overlay.ativo for true: NUNCA descreva o pacote no prompt — descreva apenas a cena/personagem com maos vazias; o pipeline sobrepoe o produto real depois\n"
-        "- Quando product_overlay.ativo for true e o shot tiver personagem, descreva o personagem com MAOS VAZIAS subindo/erguendo/estendendo nos primeiros 2 segundos — o pipeline compoe o produto real DEPOIS desse gesto\n"
-        "- Em cenas SEM product_overlay.ativo que precisem de produto, pode referenciar genericamente 'a white rectangular wet wipes package' sem descrever texto, logo ou escudo\n"
-        "\n"
-        "## REFERENCIA VISUAL DO PRODUTO\n"
-        "O pipeline injeta automaticamente a imagem real da embalagem Jose Wipes via reference_image_urls (Soul Mode da Higgsfield).\n"
-        "Em cenas com product_overlay ativo, NUNCA descreva um pacote especifico no prompt — a IA geraria um pacote generico que conflita com o real.\n"
-        "Em vez disso, descreva a cena e o personagem, e o pipeline cuida de sobrepor o produto real.\n"
-        "\n"
-        "## NARRACAO E SINCRONIA\n"
-        f"- Cada shot tem {SHOT_BLOCK_SECONDS}s. Narracao em portugues deve caber confortavelmente, com pausa final.\n"
-        f"- Limite duro: ate {max_words} palavras em `narration_text_pt` por shot (idealmente 7-{max_words}).\n"
-        "- Frases curtas, com punch. Use reticencias '...' para indicar respiracao quando precisar.\n"
-        "- Evite numeros longos ou siglas dificeis. Quando precisar dizer a marca, escreva 'José uáipes' (grafia fonetica) em narration_text_pt — assim a IA de voz pronuncia certo. Em overlay_text use 'José Wipes' normal.\n"
-        "\n"
-        "## TIMING DO PRODUTO\n"
-        "- Quando o shot mostra um personagem com gesto (mao subindo, erguendo, estendendo, revelando), defina `product_overlay.inicio_seg` >= 2.0 para o produto aparecer SO DEPOIS do gesto se completar.\n"
-        "- Quando o shot for um close de produto sem personagem (mesa, prateleira, fundo escuro), `inicio_seg` pode ser 0 ou 0.5.\n"
-        "- Evite que a embalagem entre antes do ato de revelar — o pipeline nao tem como corrigir isso depois.\n"
-        "\n"
-        "## BORDOES E TAGLINES\n"
-        "NUNCA repita o mesmo bordao. Para cada video, INVENTE uma tagline NOVA e impactante, com peso de frase de trailer.\n"
-        "\n"
-        "## REGRAS GERAIS\n"
-        "- Retorne JSON puro, sem markdown.\n"
-        "- O anuncio deve ser divertido, masculino, de bom gosto, comercial, cinematografico e direto.\n"
-        "- Evite shots lentos ou contemplativos demais; cada shot precisa empurrar para o proximo.\n"
-        "- Use narracao em portugues.\n"
-        "- Cada shot deve ter 5 segundos exatos.\n"
-        "- Nao crie mais ou menos shots do que o solicitado.\n"
-        "- Sempre priorize clareza de produto, ocasiao de uso, CTA final e retencao nos primeiros 1-2 segundos.\n"
-        "- Se houver roteiro em PDF, use como contexto adicional, sem seguir literalmente se atrapalhar a performance do anuncio.\n"
-        "- So use estas personas de voz: narrador, joao, lider, amigo.\n"
-        "- Se `product_reference_required` for true, dedique presenca clara do produto em pelo menos um shot e, de preferencia, no climax ou CTA final.\n"
-        "- Quando um shot mostrar o produto, marque `product_overlay.ativo` como true.\n"
-        "- `product_overlay.ativo` deve ser true quando o produto precisa aparecer de forma clara no shot.\n"
-        "- `product_overlay.posicao` deve ser uma de: centro, centro_inferior, direita, esquerda.\n"
-        "- `product_overlay.tamanho_pct` deve ficar entre 15 e 75.\n"
-        "- `product_overlay.inicio_seg` deve ser maior ou igual a 0.\n"
-        "- `overlay_text` deve ser curto, legivel na tela e bom para retencao.\n"
+
+    return template.format(
+        aspect_label=aspect_label,
+        aspect_ratio=aspect_ratio,
+        composition_hint=composition_hint,
+        aspect_tail=aspect_tail,
+        shot_duration=SHOT_BLOCK_SECONDS,
+        max_words=max_words,
     )
+
+
+def _prompt_content_hash() -> str:
+    """Return SHA256 hash of the planner system prompt for version tracking."""
+    import hashlib
+    from scripts.config import CONFIG_DIR
+
+    prompt_path = CONFIG_DIR / "planner_system_prompt.txt"
+    if not prompt_path.exists():
+        return "unknown"
+
+    return hashlib.sha256(prompt_path.read_bytes()).hexdigest()[:12]
 
 
 def _max_narration_words(shot_duration_seconds: int) -> int:
