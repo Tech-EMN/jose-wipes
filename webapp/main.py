@@ -12,6 +12,7 @@ from scripts.external_health import probe_external_health
 from scripts.web_server import get_web_server_status, mark_external_connectivity_checked
 from webapp.auth import AuthMiddleware
 from webapp.job_manager import JobManager
+from webapp.rate_limit import RateLimitMiddleware
 from webapp.pdf_utils import MAX_PDF_BYTES
 from webapp.schemas import CreateJobRequest
 
@@ -19,6 +20,7 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB per image
 
 app = FastAPI(title="José Wipes Web Video Studio", version="2.0.0")
 app.add_middleware(AuthMiddleware)
+app.add_middleware(RateLimitMiddleware)
 job_manager = JobManager()
 
 templates = Jinja2Templates(directory=str(PROJECT_ROOT / "templates"))
