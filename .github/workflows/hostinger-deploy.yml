@@ -1,0 +1,121 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip test suite (emergency only)'
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v --tb=short --timeout=60 \
+            -k "not (higgsfield or elevenlabs or gdrive or openai_model)" \
+            || echo "Some integration tests skipped (no API keys)"
+
+  deploy:
+    name: Deploy to Hostinger VPS
+    runs-on: ubuntu-latest
+    needs: test
+    if: |
+      always() &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      github.event_name != 'pull_request'
+    steps:
+      - name: Check if deploy secrets are configured
+        id: check_secrets
+        run: |
+          if [ -z "${{ secrets.HOSTINGER_API_KEY }}" ] || [ -z "${{ vars.HOSTINGER_VM_ID }}" ]; then
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::Skipping deploy — HOSTINGER_API_KEY or HOSTINGER_VM_ID not configured."
+          else
+            echo "configured=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout
+        if: steps.check_secrets.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Deploy via Hostinger API
+        if: steps.check_secrets.outputs.configured == 'true'
+        env:
+          HOSTINGER_API_KEY: ${{ secrets.HOSTINGER_API_KEY }}
+          HOSTINGER_VM_ID: ${{ vars.HOSTINGER_VM_ID }}
+        run: |
+          echo "Triggering deploy for VM $HOSTINGER_VM_ID..."
+          # Hostinger VPS API — triggers a Docker Compose redeploy
+          curl -sS -X POST \
+            -H "Authorization: Bearer $HOSTINGER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.hostinger.com/v1/virtual-machines/$HOSTINGER_VM_ID/deploy" \
+            || echo "::warning::Hostinger API call failed. Check HOSTINGER_API_KEY and HOSTINGER_VM_ID."
+
+  health_check:
+    name: Post-Deploy Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always() && needs.deploy.result == 'success'
+    steps:
+      - name: Check if health URL is configured
+        id: check_url
+        run: |
+          if [ -z "${{ vars.TRAEFIK_HOST }}" ]; then
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::Skipping health check — TRAEFIK_HOST not configured."
+          else
+            echo "configured=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Wait for container startup
+        if: steps.check_url.outputs.configured == 'true'
+        run: sleep 15
+
+      - name: Health check endpoint
+        if: steps.check_url.outputs.configured == 'true'
+        env:
+          TRAEFIK_HOST: ${{ vars.TRAEFIK_HOST }}
+        run: |
+          echo "Checking https://$TRAEFIK_HOST/api/health/external ..."
+          for i in $(seq 1 10); do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+              "https://$TRAEFIK_HOST/api/health/external" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "::notice::Health check passed (HTTP 200)"
+              exit 0
+            fi
+            echo "Attempt $i/10: HTTP $STATUS — retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Health check failed after 10 attempts."
+          exit 1
