@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -203,6 +203,59 @@ def get_job_status(job_id: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return JSONResponse(status.model_dump())
+
+
+@app.get("/api/jobs/{job_id}/stream")
+async def stream_job_status(job_id: str, request: Request):
+    """Stream job status updates via Server-Sent Events.
+
+    Replaces polling — the client opens an EventSource and receives
+    updates whenever the job status changes. The stream ends when
+    the job reaches a terminal state (completed or failed).
+    """
+    import asyncio
+    import json
+
+    async def event_generator():
+        last_status = None
+        poll_interval = 1.0  # seconds between disk checks
+
+        try:
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    status = job_manager.get_job_status(job_id)
+                except FileNotFoundError:
+                    yield f"event: error\ndata: {{\"detail\": \"Job not found\"}}\n\n"
+                    break
+
+                current = status.model_dump()
+
+                # Only send if status changed
+                if current != last_status:
+                    last_status = current
+                    yield f"data: {json.dumps(current, ensure_ascii=False)}\n\n"
+
+                # Terminal states
+                if status.status in {"completed", "failed"}:
+                    break
+
+                await asyncio.sleep(poll_interval)
+        except asyncio.CancelledError:
+            pass
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/jobs/{job_id}/download")

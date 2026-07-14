@@ -347,20 +347,35 @@ async function fetchStatus(jobId) {
   renderStatus(data);
 }
 
-function startPolling(jobId) {
+function startSSE(jobId) {
   if (pollHandle) {
     clearInterval(pollHandle);
+    pollHandle = null;
   }
 
-  fetchStatus(jobId).catch((error) => {
-    jobError.textContent = error.message;
-  });
+  const streamUrl = `/api/jobs/${jobId}/stream`;
+  const eventSource = new EventSource(streamUrl);
 
-  pollHandle = setInterval(() => {
-    fetchStatus(jobId).catch((error) => {
-      jobError.textContent = error.message;
-    });
-  }, 3000);
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      renderStatus(data);
+
+      // EventSource will close on terminal states via the server
+      if (data.status === "completed" || data.status === "failed") {
+        eventSource.close();
+      }
+    } catch (error) {
+      console.error("SSE parse error:", error);
+    }
+  };
+
+  eventSource.onerror = (error) => {
+    console.error("SSE connection error:", error);
+    eventSource.close();
+    // Fallback: use polling as backup
+    startPolling(jobId);
+  };
 }
 
 /* ===== FORM SUBMIT ===== */
@@ -410,7 +425,7 @@ form.addEventListener("submit", async (event) => {
     }
 
     formMessage.textContent = `Job ${payload.job_id} criado.`;
-    startPolling(payload.job_id);
+    startSSE(payload.job_id);
   } catch (error) {
     isProcessing = false;
     updateSubmitState();
