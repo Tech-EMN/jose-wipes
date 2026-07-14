@@ -1,0 +1,63 @@
+{
+  "titulo_video": "José Wipes — Alívio Imediato (E2E Test)",
+  "duracao_total_estimada": 9,
+  "cenas": [
+    {
+      "numero": 1,
+      "titulo": "Abertura — Desconforto",
+      "tipo": "broll",
+      "modelo": "kling-video/v2.1/master/text-to-video",
+      "prompt": "A person wincing in discomfort, sitting on a couch, soft indoor lighting, shallow depth of field, cinematic, 9:16 vertical format",
+      "duracao_segundos": 5,
+      "aspecto": "9:16",
+      "resolucao": "1080p",
+      "audio": {
+        "tipo": "overlay",
+        "persona_voz": "narrador",
+        "texto_fala": "Quem nunca sentiu aquele incômodo que não passa?"
+      },
+      "texto_overlay": {},
+      "produto_overlay": {
+        "ativo": false,
+        "posicao": "centro",
+        "tamanho_pct": 55
+      }
+    },
+    {
+      "numero": 2,
+      "titulo": "Solução — Alívio",
+      "tipo": "broll",
+      "modelo": "kling-video/v2.1/master/text-to-video",
+      "prompt": "A person smiling with relief, bright warm lighting, clean white bathroom setting, fresh and clean aesthetic, cinematic close-up, 9:16 vertical format",
+      "duracao_segundos": 4,
+      "aspecto": "9:16",
+      "resolucao": "1080p",
+      "audio": {
+        "tipo": "overlay",
+        "persona_voz": "narrador",
+        "texto_fala": "José Wipes. Alívio imediato que você sente na hora."
+      },
+      "texto_overlay": {
+        "texto": "ALÍVIO IMEDIATO",
+        "posicao": "centro_inferior"
+      },
+      "produto_overlay": {
+        "ativo": false,
+        "posicao": "centro",
+        "tamanho_pct": 55
+      }
+    }
+  ],
+  "card_final": {
+    "duracao_segundos": 3,
+    "audio": {
+      "tipo": "overlay",
+      "persona_voz": "narrador",
+      "texto_fala": "José Wipes. A recuperação que você merece."
+    },
+    "texto_overlay": {
+      "linha1": "José Wipes",
+      "linha2": "A recuperação que você merece"
+    }
+  }
+}
