@@ -12,6 +12,7 @@ from scripts.external_health import probe_external_health
 from scripts.web_server import get_web_server_status, mark_external_connectivity_checked
 from webapp.auth import AuthMiddleware
 from webapp.job_manager import JobManager
+from webapp.moderation import moderate_prompt_sync
 from webapp.rate_limit import RateLimitMiddleware
 from webapp.pdf_utils import MAX_PDF_BYTES
 from webapp.schemas import CreateJobRequest
@@ -117,6 +118,14 @@ async def create_job(
     ref_cores: UploadFile | None = File(default=None),
 ) -> JSONResponse:
     """Create a background job from the submitted web form."""
+
+    # Content safety check before any external API call
+    moderation = moderate_prompt_sync(prompt)
+    if not moderation.allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=moderation.reason or "Conteúdo bloqueado pela moderação.",
+        )
 
     try:
         request_model = CreateJobRequest.model_validate(
