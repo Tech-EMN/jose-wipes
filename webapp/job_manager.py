@@ -16,7 +16,7 @@ from scripts.integration_errors import IntegrationFailure, build_generic_failure
 from webapp.model_registry import get_model_config
 from webapp.pdf_utils import extract_pdf_text
 from webapp.pipeline_service import render_planned_video
-from webapp.planner import plan_web_video
+from webapp.planner import plan_web_video, _prompt_content_hash
 from webapp.schemas import CreateJobRequest, JobStatusResponse
 
 
@@ -138,6 +138,7 @@ class JobManager:
             "failure_reason": None,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
+            "planner_prompt_hash": _prompt_content_hash(),
             "request": request.model_dump(),
             "script_pdf_path": str(pdf_path) if pdf_path else None,
             "ref_embalagem_path": ref_paths["embalagem"],
