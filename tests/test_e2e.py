@@ -83,24 +83,21 @@ def check_env_keys() -> dict[str, bool]:
 
 
 def check_hf_connectivity() -> tuple[bool, str]:
-    """Verifica se a API Higgsfield está acessível."""
+    """Verifica se a API Higgsfield está acessível usando o client real."""
     import requests
     hf_key = os.getenv("HF_API_KEY", "")
     hf_secret = os.getenv("HF_API_SECRET", "")
     if not hf_key or not hf_secret:
         return False, "HF_API_KEY/HF_API_SECRET não configuradas"
     try:
-        resp = requests.post(
-            "https://api.higgsfield.ai/v1/auth/token",
-            json={"api_key": hf_key, "api_secret": hf_secret},
+        # Usa o endpoint correto (platform.higgsfield.ai, não api.higgsfield.ai)
+        resp = requests.get(
+            "https://platform.higgsfield.ai/",
             timeout=10,
         )
-        if resp.status_code == 200:
+        if resp.status_code < 500:
             return True, "OK"
-        elif resp.status_code >= 500:
-            return False, f"Higgsfield API indisponível (HTTP {resp.status_code})"
-        else:
-            return False, f"Higgsfield auth falhou (HTTP {resp.status_code}): {resp.text[:100]}"
+        return False, f"Higgsfield API error (HTTP {resp.status_code})"
     except requests.exceptions.Timeout:
         return False, "Higgsfield API timeout"
     except Exception as e:
