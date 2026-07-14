@@ -39,9 +39,14 @@ def _gerar_video_com_fallback(
     reference_image_url: str | None,
     extra_arguments: dict,
 ) -> "Path | None":
-    """Call gerar_video_higgsfield with automatic fallback on failure."""
+    """Generate video with automatic fallback using VideoGenerator interface."""
     import logging
     _log = logging.getLogger(__name__)
+
+    from webapp.video_generator import (
+        VideoGenerationRequest,
+        create_video_generator,
+    )
 
     applications = [model_config.application]
     if model_config.fallback_application:
@@ -50,19 +55,20 @@ def _gerar_video_com_fallback(
     last_exc: IntegrationFailure | None = None
     for app in applications:
         try:
-            result = gerar_video_higgsfield(
+            generator = create_video_generator(
                 app,
-                prompt,
-                aspecto=aspecto,
-                resolucao=resolucao,
-                duracao=duracao,
-                output_path=output_path,
-                reference_image_url=reference_image_url,
                 extra_arguments=extra_arguments,
-                raise_on_failure=True,
-                max_retries=0,
             )
-            return result
+            request = VideoGenerationRequest(
+                prompt=prompt,
+                aspect_ratio=aspecto,
+                resolution=resolucao,
+                duration_seconds=duracao,
+                output_path=Path(output_path),
+                reference_image_url=reference_image_url,
+            )
+            result = generator.generate(request)
+            return result.output_path
         except IntegrationFailure as exc:
             last_exc = exc
             if app != applications[-1]:
