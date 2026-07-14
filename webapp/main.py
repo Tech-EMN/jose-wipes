@@ -7,7 +7,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from scripts.config import PROJECT_ROOT
+from scripts.config import PROJECT_ROOT, LOGS_DIR
+from scripts.logging_config import configure_logging
 from scripts.external_health import probe_external_health
 from scripts.web_server import get_web_server_status, mark_external_connectivity_checked
 from webapp.auth import AuthMiddleware
@@ -42,9 +43,19 @@ def startup_event() -> None:
     web + worker services (production docker-compose).
     """
     import os
+    import logging
+
+    # Configure structured logging before anything else
+    json_mode = os.getenv("JW_LOG_JSON", "").strip().lower() not in {"false", "0", "no"}
+    configure_logging(
+        level=os.getenv("JW_LOG_LEVEL", "INFO"),
+        json_output=json_mode,
+        log_dir=LOGS_DIR,
+    )
+    _log = logging.getLogger("webapp.main")
+    _log.info("José Wipes Web Studio v2.0.0 starting")
+
     if os.getenv("JW_SKIP_WORKER", "").strip().lower() in {"true", "1", "yes"}:
-        import logging
-        _log = logging.getLogger("webapp.main")
         _log.info("JW_SKIP_WORKER=true — web server running without background worker")
         return
     job_manager.start()
