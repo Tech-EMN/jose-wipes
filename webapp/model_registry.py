@@ -27,56 +27,57 @@ def _env_or_default(name: str, fallback: str) -> str:
     return value or fallback
 
 
+# Único modelo confirmado como disponível nesta conta Higgsfield:
+#   kling-video/v2.1/master/text-to-video  (Kling 2.1 Master)
+# Atualizado após diagnóstico de 2026-07-16 (scripts/descobrir_modelos_higgsfield.py).
+# Use as env vars HF_MODEL_* para sobrescrever quando novos modelos forem contratados.
+
+_KW_2_1 = "kling-video/v2.1/master/text-to-video"
+
 VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
     "seedance_1_5_pro": VideoModelConfig(
         key="seedance_1_5_pro",
-        label="Seedance 1.5 Pro",
+        label="Kling 2.1 — Padrão",
         tier="Padrão",
         application=_env_or_default(
-            "HF_MODEL_SEEDANCE_1_5_PRO", "bytedance/seedance/pro"
+            "HF_MODEL_SEEDANCE_1_5_PRO", _KW_2_1
         ),
         allowed_resolutions=("720p", "1080p"),
-        fallback_application=_env_or_default(
-            "HF_MODEL_SEEDANCE_1_5_PRO_FALLBACK",
-            "bytedance/seedance/v1/pro/text-to-video",
-        ),
+        fallback_application="",
         default_arguments={},
         fallback_note=(
-            "Configure HF_MODEL_SEEDANCE_1_5_PRO no .env se a sua conta usar outro application ID."
+            "Sua conta atual só possui Kling 2.1. "
+            "Defina HF_MODEL_SEEDANCE_1_5_PRO no .env quando contratar Seedance."
         ),
     ),
     "kling_3_0": VideoModelConfig(
         key="kling_3_0",
-        label="Kling 3.0",
+        label="Kling 2.1 — Realista",
         tier="Realista",
         application=_env_or_default(
-            "HF_MODEL_KLING_3_0", "kling/3.0"
+            "HF_MODEL_KLING_3_0", _KW_2_1
         ),
         allowed_resolutions=("720p", "1080p"),
-        fallback_application=_env_or_default(
-            "HF_MODEL_KLING_3_0_FALLBACK",
-            "kling-video/v2.1/master/text-to-video",
-        ),
+        fallback_application="",
         default_arguments={},
         fallback_note=(
-            "Configure HF_MODEL_KLING_3_0 no .env se a sua conta usar outro application ID."
+            "Sua conta atual só possui Kling 2.1. "
+            "Defina HF_MODEL_KLING_3_0 no .env quando contratar Kling 3.0."
         ),
     ),
     "veo_3_1": VideoModelConfig(
         key="veo_3_1",
-        label="Veo 3.1",
-        tier="Ultra-Profissional",
+        label="Kling 2.1 — Profissional",
+        tier="Profissional",
         application=_env_or_default(
-            "HF_MODEL_VEO_3_1", "google/veo/3.1"
+            "HF_MODEL_VEO_3_1", _KW_2_1
         ),
         allowed_resolutions=("720p", "1080p"),
-        fallback_application=_env_or_default(
-            "HF_MODEL_VEO_3_1_FALLBACK",
-            "google/veo/v3.1/text-to-video",
-        ),
+        fallback_application="",
         default_arguments={},
         fallback_note=(
-            "Configure HF_MODEL_VEO_3_1 no .env se a sua conta usar outro application ID."
+            "Sua conta atual só possui Kling 2.1. "
+            "Defina HF_MODEL_VEO_3_1 no .env quando contratar Veo."
         ),
     ),
 }
