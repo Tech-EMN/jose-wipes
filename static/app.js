@@ -35,9 +35,9 @@ const REF_TYPES = ["embalagem", "logo", "cores"];
 
 /* ===== MODEL HINTS ===== */
 const MODEL_HINTS = {
-  seedance_1_5_pro: "Seedance 1.5 Pro: boa qualidade com rapidez e eficiencia de creditos.",
-  kling_3_0: "Kling 3.0: alto fotorrealismo com otimo custo-beneficio.",
-  veo_3_1: "Veo 3.1 (Google): qualidade cinematografica maxima. Consome mais creditos.",
+  seedance_1_5_pro: "Kling 2.1 Padrão: qualidade equilibrada. Unico modelo disponivel na sua conta.",
+  kling_3_0: "Kling 2.1 Realista: mesmo modelo base com tier diferente. Unico disponivel.",
+  veo_3_1: "Kling 2.1 Profissional: mesmo modelo base com tier diferente. Unico disponivel.",
 };
 
 if (modelSelect) {
