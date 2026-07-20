@@ -2,7 +2,7 @@
 
 **Autor:** Daedalus DEV (com Guilherme)
 **Branch:** main (GitHub: Tech-EMN/jose-wipes)
-**Status:** ✅ Código deployado · ⏳ Aguardando propagação da permissão na API key
+**Status:** ✅ Código corrigido e deployado · ✅ API key configurada · ⏳ Aguardando teste em produção
 
 ---
 
@@ -28,29 +28,44 @@ O Web Studio do José Wipes tinha 3 tiers de vídeo que apontavam todos para o m
 
 ---
 
+## Commits (4 no total)
+
+| Commit | Descrição |
+|--------|-----------|
+| `72cb146` | feat: Sora-2 (Padrão) e Sora-2-Pro (Profissional) — 5 arquivos |
+| `c5acd74` | fix: `input_reference` com `ImageInputReferenceParam` + mensagens de erro específicas |
+| `1114ba7` | docs: handoff inicial |
+| `a2e8dd7` | fix: tamanhos Sora — sora-2 só suporta 720p (downgrade automático de 1080p) |
+
+---
+
 ## Arquivos alterados
 
-| Arquivo | Commit | O que |
-|---------|--------|-------|
-| `webapp/video_generator.py` | `72cb146` + `c5acd74` | Nova classe `OpenAISoraVideoGenerator` + factory com prefixo `openai:` |
-| `webapp/schemas.py` | `72cb146` | `VideoModelLiteral` expandido com `sora_2`, `sora_2_pro` |
-| `webapp/model_registry.py` | `72cb146` | Registro atualizado com 5 entradas |
-| `templates/index.html` | `72cb146` | Dropdown do Web Studio atualizado |
-| `static/app.js` | `72cb146` | Hints dos modelos atualizados |
+| Arquivo | O que |
+|---------|-------|
+| `webapp/video_generator.py` | Nova classe `OpenAISoraVideoGenerator` + factory com prefixo `openai:` + tamanhos por modelo |
+| `webapp/schemas.py` | `VideoModelLiteral` expandido com `sora_2`, `sora_2_pro` |
+| `webapp/model_registry.py` | Registro atualizado com 5 entradas (3 originais + 2 novas) |
+| `templates/index.html` | Dropdown do Web Studio atualizado |
+| `static/app.js` | Hints dos modelos atualizados |
 
-### Como funciona o roteamento (`video_generator.py`)
+---
 
-```python
-application.startswith("openai:")  → OpenAISoraVideoGenerator
-else                               → HiggsfieldVideoGenerator
-```
+## Regras de tamanho por modelo
 
-### Limitação do Sora
+| Cenário | sora-2 | sora-2-pro |
+|---------|--------|------------|
+| 9:16 720p | `720x1280` | `720x1280` |
+| 9:16 1080p | ⚠️ downgrade → `720x1280` | `1024x1792` |
+| 16:9 720p | `1280x720` | `1280x720` |
+| 16:9 1080p | ⚠️ downgrade → `1280x720` | `1792x1024` |
 
-- Sora suporta durações: **4, 8 ou 12 segundos**
-- Os shots do planner são de **5 segundos**
-- O adapter arredonda automaticamente para **4 segundos**
-- A diferença de 1s é absorvida pelo FFmpeg na composição final
+### Limitação de duração
+
+- Sora suporta: **4, 8 ou 12 segundos**
+- Shots do planner: **5 segundos**
+- Adapter arredonda automaticamente para **4 segundos**
+- Diferença de 1s absorvida pelo FFmpeg
 
 ---
 
@@ -58,39 +73,38 @@ else                               → HiggsfieldVideoGenerator
 
 A `OPENAI_API_KEY` do `.env` precisa ter o scope **`api.videos.write`**.
 
-**Status:** Guilherme alterou a key para Restricted com Videos = Write em 2026-07-20. Aguardando propagação (~2 minutos).
+**Status:** ✅ Guilherme configurou Videos = Write em 2026-07-20 (key Restricted, sem alterar outros scopes).
 
-Se o erro `401 — Missing scopes: api.videos.write` persistir, verificar:
-1. Se o scope foi salvo corretamente
-2. Se o projeto OpenAI vinculado à key tem Sora habilitado
+**Nota EBI:** Este procedimento de auth externa não está documentado no EBI/ATRIA. Pendente migrar para `MANUAL_OPERACAO.md`.
 
 ---
 
 ## Erros tratados
 
-| Código | Retryable | Mensagem |
-|--------|-----------|----------|
-| `sora_auth_error` (401) | ❌ Não | "Adicione o scope api.videos.write" |
-| `sora_rate_limit` (429) | ✅ Sim | "Limite de requisições atingido" |
-| `sora_api_error` (genérico) | ✅ Sim | Inclui o erro real da API (até 200 chars) |
-| `no_api_key` | ❌ Não | "OPENAI_API_KEY não configurada" |
+| Código | Retryable | Gatilho | Mensagem |
+|--------|-----------|---------|----------|
+| `sora_auth_error` (401) | ❌ Não | Scope ausente | "Adicione o scope api.videos.write" |
+| `sora_rate_limit` (429) | ✅ Sim | Limite excedido | "Limite de requisições atingido" |
+| `sora_api_error` (400) | ✅ Sim | Tamanho inválido, etc. | Inclui erro real da API (até 200 chars) |
+| `sora_download_error` | ✅ Sim | Falha no download | "Vídeo gerado mas falha no download" |
+| `no_api_key` | ❌ Não | Chave ausente | "OPENAI_API_KEY não configurada" |
 
 ---
 
 ## Teste rápido
 
-Depois que a permissão propagar, gerar um vídeo simples pelo Web Studio:
-
 1. Acessar o Web Studio (Hostinger)
 2. Selecionar tier **"Sora-2 — Padrão"**
 3. Prompt curto: `"Vídeo de 10 segundos, fundo branco, produto centralizado"`
-4. Verificar se o job completa sem erro 401
+4. Resolução 720p (ou 1080p — downgrade automático)
+5. Verificar se o job completa sem erro
 
 ---
 
 ## Pendências
 
-- [ ] Confirmar que Sora-2 funciona após propagação da permissão
-- [ ] Documentar procedimento de API key no MANUAL_OPERACAO.md
+- [ ] Testar Sora-2 em produção (após redeploy com `a2e8dd7`)
+- [ ] Testar Sora-2-Pro em produção
+- [ ] Migrar procedimento de API key do handoff para `MANUAL_OPERACAO.md`
 - [ ] Avaliar se MiniMax também deve ser integrado (já configurado no gateway)
 - [ ] Rodar `descobrir_modelos_higgsfield.py` no servidor de produção para verificar novos modelos
