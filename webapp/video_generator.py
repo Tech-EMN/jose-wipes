@@ -84,11 +84,19 @@ class VideoGenerator(ABC):
 class OpenAISoraVideoGenerator(VideoGenerator):
     """OpenAI Sora implementation of the VideoGenerator interface."""
 
-    SORA_SIZES: dict[tuple[str, str], str] = {
+    # sora-2 só suporta 720x1280 / 1280x720
+    # sora-2-pro suporta todas: 720x1280, 1280x720, 1024x1792, 1792x1024
+    SORA_SIZES_PRO: dict[tuple[str, str], str] = {
         ("9:16", "720p"): "720x1280",
         ("9:16", "1080p"): "1024x1792",
         ("16:9", "720p"): "1280x720",
         ("16:9", "1080p"): "1792x1024",
+    }
+    SORA_SIZES_BASE: dict[tuple[str, str], str] = {
+        ("9:16", "720p"): "720x1280",
+        ("9:16", "1080p"): "720x1280",  # downgrade: sora-2 não tem 1080p
+        ("16:9", "720p"): "1280x720",
+        ("16:9", "1080p"): "1280x720",  # downgrade
     }
 
     SORA_DURATIONS: frozenset[int] = frozenset({4, 8, 12})
@@ -124,10 +132,21 @@ class OpenAISoraVideoGenerator(VideoGenerator):
 
         client = OpenAI(api_key=OPENAI_API_KEY)
 
-        size = self.SORA_SIZES.get(
+        size_map = (
+            self.SORA_SIZES_PRO
+            if "pro" in self._model
+            else self.SORA_SIZES_BASE
+        )
+        size = size_map.get(
             (request.aspect_ratio, request.resolution),
             "720x1280",
         )
+
+        if "pro" not in self._model and request.resolution == "1080p":
+            _log.warning(
+                "Sora-2 não suporta 1080p; downgrade para 720p. "
+                "Use Sora-2-Pro para resoluções acima de 720p.",
+            )
 
         dur = request.duration_seconds
         nearest = min(self.SORA_DURATIONS, key=lambda x: abs(x - dur))
