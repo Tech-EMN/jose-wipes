@@ -35,9 +35,11 @@ const REF_TYPES = ["embalagem", "logo", "cores"];
 
 /* ===== MODEL HINTS ===== */
 const MODEL_HINTS = {
-  seedance_1_5_pro: "Kling 2.1 Padrão: qualidade equilibrada. Unico modelo disponivel na sua conta.",
-  kling_3_0: "Kling 2.1 Realista: mesmo modelo base com tier diferente. Unico disponivel.",
-  veo_3_1: "Kling 2.1 Profissional: mesmo modelo base com tier diferente. Unico disponivel.",
+  seedance_1_5_pro: "Sora-2 Padrão: text-to-video via OpenAI. Suporta 4/8/12s. Chave OPENAI_API_KEY necessária.",
+  kling_3_0: "Kling 2.1 Realista: via Higgsfield. Modelo base confiável para cenas com personagens.",
+  veo_3_1: "Sora-2-Pro Profissional: qualidade máxima OpenAI. Ideal para product shots e cenas finais.",
+  sora_2: "Sora-2 Padrão: via OpenAI. Bom custo-benefício para produção em escala.",
+  sora_2_pro: "Sora-2-Pro Profissional: via OpenAI. Qualidade premium para entregas comerciais.",
 };
 
 if (modelSelect) {

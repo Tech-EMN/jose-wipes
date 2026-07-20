@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 ResolutionLiteral = Literal["720p", "1080p"]
 OrientationLiteral = Literal["vertical", "horizontal"]
 DurationLiteral = Literal[10, 30, 60]
-VideoModelLiteral = Literal["seedance_1_5_pro", "kling_3_0", "veo_3_1"]
+VideoModelLiteral = Literal["seedance_1_5_pro", "kling_3_0", "veo_3_1", "sora_2", "sora_2_pro"]
 
 VALID_VOICE_PERSONAS = {"narrador", "joao", "lider", "amigo"}
 

@@ -81,6 +81,127 @@ class VideoGenerator(ABC):
         """Human-readable provider identifier (e.g. 'Higgsfield')."""
 
 
+class OpenAISoraVideoGenerator(VideoGenerator):
+    """OpenAI Sora implementation of the VideoGenerator interface."""
+
+    SORA_SIZES: dict[tuple[str, str], str] = {
+        ("9:16", "720p"): "720x1280",
+        ("9:16", "1080p"): "1024x1792",
+        ("16:9", "720p"): "1280x720",
+        ("16:9", "1080p"): "1792x1024",
+    }
+
+    SORA_DURATIONS: frozenset[int] = frozenset({4, 8, 12})
+
+    def __init__(
+        self,
+        model: str,
+        *,
+        extra_arguments: dict | None = None,
+    ) -> None:
+        self._model = model
+        self._extra_arguments = extra_arguments or {}
+
+    @property
+    def provider_name(self) -> str:
+        return f"OpenAI Sora ({self._model})"
+
+    def generate(self, request: VideoGenerationRequest) -> VideoGenerationResult:
+        from openai import OpenAI
+
+        from scripts.config import OPENAI_API_KEY
+        from scripts.integration_errors import IntegrationFailure
+
+        if not OPENAI_API_KEY:
+            raise IntegrationFailure(
+                service="openai",
+                stage="generation",
+                code="no_api_key",
+                user_message="OPENAI_API_KEY não configurada no .env.",
+                technical_message="Missing OPENAI_API_KEY for Sora generation.",
+                retryable=False,
+            )
+
+        client = OpenAI(api_key=OPENAI_API_KEY)
+
+        size = self.SORA_SIZES.get(
+            (request.aspect_ratio, request.resolution),
+            "720x1280",
+        )
+
+        dur = request.duration_seconds
+        nearest = min(self.SORA_DURATIONS, key=lambda x: abs(x - dur))
+        seconds = str(nearest)
+
+        if nearest != dur:
+            _log.info(
+                "Sora: duração %ds arredondada para %ss (suportado: 4/8/12)",
+                dur,
+                seconds,
+            )
+
+        params: dict[str, object] = {
+            "model": self._model,
+            "prompt": request.prompt,
+            "seconds": seconds,
+            "size": size,
+            "poll_interval_ms": 5000,
+        }
+
+        if request.reference_image_url:
+            params["input_reference"] = request.reference_image_url
+
+        params.update(self._extra_arguments)
+
+        try:
+            video = client.videos.create_and_poll(**params)  # type: ignore[arg-type]
+        except Exception as exc:
+            raise IntegrationFailure(
+                service="openai",
+                stage="generation",
+                code="sora_api_error",
+                user_message="Falha ao gerar vídeo via OpenAI Sora.",
+                technical_message=str(exc),
+                retryable=True,
+            ) from exc
+
+        try:
+            content = client.videos.download_content(video.id)
+        except Exception as exc:
+            raise IntegrationFailure(
+                service="openai",
+                stage="generation",
+                code="sora_download_error",
+                user_message="Vídeo gerado mas falha no download.",
+                technical_message=str(exc),
+                retryable=True,
+            ) from exc
+
+        request.output_path.parent.mkdir(parents=True, exist_ok=True)
+        request.output_path.write_bytes(content)
+
+        _log.info(
+            "Sora: vídeo %s salvo em %s (%.1f MB)",
+            video.id,
+            request.output_path,
+            len(content) / (1024 * 1024),
+        )
+
+        return VideoGenerationResult(
+            output_path=request.output_path,
+            provider=self.provider_name,
+            duration_seconds=float(seconds),
+        )
+
+    def health_check(self) -> bool:
+        try:
+            from scripts.config import OPENAI_API_KEY
+
+            return bool(OPENAI_API_KEY)
+        except Exception:
+            return False
+
+
 class HiggsfieldVideoGenerator(VideoGenerator):
     """Higgsfield API implementation of the VideoGenerator interface."""
 
@@ -139,9 +260,17 @@ def create_video_generator(
 ) -> VideoGenerator:
     """Factory: create the configured video generator.
 
-    Currently only Higgsfield is supported. When new providers
-    are added, this is the single place to swap implementations.
+    Routing:
+    - "openai:<model>" → OpenAISoraVideoGenerator  (ex: "openai:sora-2")
+    - anything else   → HiggsfieldVideoGenerator   (ex: "kling-video/v2.1/...")
     """
+    if application.startswith("openai:"):
+        model = application.split(":", 1)[1]
+        return OpenAISoraVideoGenerator(
+            model=model,
+            extra_arguments=extra_arguments,
+        )
+
     return HiggsfieldVideoGenerator(
         application=application,
         extra_arguments=extra_arguments,

@@ -37,17 +37,15 @@ _KW_2_1 = "kling-video/v2.1/master/text-to-video"
 VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
     "seedance_1_5_pro": VideoModelConfig(
         key="seedance_1_5_pro",
-        label="Kling 2.1 — Padrão",
+        label="Sora-2 — Padrão",
         tier="Padrão",
-        application=_env_or_default(
-            "HF_MODEL_SEEDANCE_1_5_PRO", _KW_2_1
-        ),
+        application="openai:sora-2",
         allowed_resolutions=("720p", "1080p"),
         fallback_application="",
         default_arguments={},
         fallback_note=(
-            "Sua conta atual só possui Kling 2.1. "
-            "Defina HF_MODEL_SEEDANCE_1_5_PRO no .env quando contratar Seedance."
+            "Sora-2 gera vídeos de 4/8/12s via OpenAI. "
+            "Durações do planner (5s/shot) são arredondadas para 4s."
         ),
     ),
     "kling_3_0": VideoModelConfig(
@@ -67,18 +65,36 @@ VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
     ),
     "veo_3_1": VideoModelConfig(
         key="veo_3_1",
-        label="Kling 2.1 — Profissional",
+        label="Sora-2-Pro — Profissional",
         tier="Profissional",
-        application=_env_or_default(
-            "HF_MODEL_VEO_3_1", _KW_2_1
-        ),
+        application="openai:sora-2-pro",
         allowed_resolutions=("720p", "1080p"),
         fallback_application="",
         default_arguments={},
         fallback_note=(
-            "Sua conta atual só possui Kling 2.1. "
-            "Defina HF_MODEL_VEO_3_1 no .env quando contratar Veo."
+            "Sora-2-Pro: qualidade máxima OpenAI. "
+            "Durações do planner (5s/shot) são arredondadas para 4s."
         ),
+    ),
+    "sora_2": VideoModelConfig(
+        key="sora_2",
+        label="Sora-2 — Padrão",
+        tier="Padrão",
+        application="openai:sora-2",
+        allowed_resolutions=("720p", "1080p"),
+        fallback_application="",
+        default_arguments={},
+        fallback_note="Sora-2 via OPENAI_API_KEY. 4/8/12s suportados.",
+    ),
+    "sora_2_pro": VideoModelConfig(
+        key="sora_2_pro",
+        label="Sora-2-Pro — Profissional",
+        tier="Profissional",
+        application="openai:sora-2-pro",
+        allowed_resolutions=("720p", "1080p"),
+        fallback_application="",
+        default_arguments={},
+        fallback_note="Sora-2-Pro via OPENAI_API_KEY. Qualidade máxima.",
     ),
 }
 
