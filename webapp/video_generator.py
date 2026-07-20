@@ -149,19 +149,53 @@ class OpenAISoraVideoGenerator(VideoGenerator):
         }
 
         if request.reference_image_url:
-            params["input_reference"] = request.reference_image_url
+            from openai.types.image_input_reference_param import (
+                ImageInputReferenceParam,
+            )
+
+            params["input_reference"] = ImageInputReferenceParam(
+                image_url=request.reference_image_url,
+            )
 
         params.update(self._extra_arguments)
 
         try:
             video = client.videos.create_and_poll(**params)  # type: ignore[arg-type]
         except Exception as exc:
+            error_msg = str(exc)
+            error_lower = error_msg.lower()
+
+            # Auth / permission errors are NOT retryable
+            if "insufficient permissions" in error_lower or "401" in error_msg:
+                raise IntegrationFailure(
+                    service="openai",
+                    stage="generation",
+                    code="sora_auth_error",
+                    user_message=(
+                        "OPENAI_API_KEY sem permissão para Sora. "
+                        "Adicione o scope 'api.videos.write' na API key "
+                        "no dashboard da OpenAI."
+                    ),
+                    technical_message=error_msg,
+                    retryable=False,
+                ) from exc
+
+            if "rate" in error_lower or "429" in error_msg:
+                raise IntegrationFailure(
+                    service="openai",
+                    stage="generation",
+                    code="sora_rate_limit",
+                    user_message="Limite de requisições da Sora atingido. Aguarde e tente novamente.",
+                    technical_message=error_msg,
+                    retryable=True,
+                ) from exc
+
             raise IntegrationFailure(
                 service="openai",
                 stage="generation",
                 code="sora_api_error",
-                user_message="Falha ao gerar vídeo via OpenAI Sora.",
-                technical_message=str(exc),
+                user_message=f"Falha ao gerar vídeo via OpenAI Sora: {error_msg[:200]}",
+                technical_message=error_msg,
                 retryable=True,
             ) from exc
 
