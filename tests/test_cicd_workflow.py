@@ -88,3 +88,15 @@ class TestCICDWorkflow:
         ]
         for var in required:
             assert var in content, f"Missing {var} in .env.hostinger.example"
+
+    def test_planner_model_matches_runtime_and_requires_explicit_production_env(self):
+        root = Path(__file__).parent.parent
+        runtime = (root / "scripts" / "config.py").read_text(encoding="utf-8")
+        env_example = (root / ".env.hostinger.example").read_text(encoding="utf-8")
+        compose = (root / "docker-compose.hostinger.yml").read_text(encoding="utf-8")
+
+        assert 'OPENAI_PLANNER_MODEL", "gpt-4.1-mini"' in runtime
+        assert "OPENAI_PLANNER_MODEL=gpt-4.1-mini" in env_example
+        assert compose.count("${OPENAI_PLANNER_MODEL:?OPENAI_PLANNER_MODEL must be set}") == 2
+        assert "gpt-5.4-pro" not in env_example
+        assert "gpt-5.4-pro" not in compose

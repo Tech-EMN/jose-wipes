@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from scripts.config import PROJECT_ROOT, LOGS_DIR
+from scripts.config import PROJECT_ROOT, LOGS_DIR, OPENAI_PLANNER_MODEL
 from scripts.logging_config import configure_logging
 from scripts.external_health import probe_external_health
 from scripts.web_server import get_web_server_status, mark_external_connectivity_checked
@@ -54,6 +54,7 @@ def startup_event() -> None:
     )
     _log = logging.getLogger("webapp.main")
     _log.info("José Wipes Web Studio v2.0.0 starting")
+    _log.info("Planner model: %s", OPENAI_PLANNER_MODEL)
 
     if os.getenv("JW_SKIP_WORKER", "").strip().lower() in {"true", "1", "yes"}:
         _log.info("JW_SKIP_WORKER=true — web server running without background worker")

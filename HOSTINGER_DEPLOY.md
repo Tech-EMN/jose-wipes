@@ -63,7 +63,7 @@ Cadastre no projeto do app os valores de `.env.hostinger.example`:
 - `HF_API_KEY`
 - `HF_API_SECRET`
 - `OPENAI_API_KEY`
-- `OPENAI_PLANNER_MODEL`
+- `OPENAI_PLANNER_MODEL=gpt-4.1-mini`
 - `ELEVENLABS_API_KEY`
 - `TZ`
 - `PYTHONUNBUFFERED`
@@ -128,7 +128,7 @@ No GitHub, configure:
 
 - `HOSTINGER_VM_ID`
 - `TRAEFIK_HOST`
-- `OPENAI_PLANNER_MODEL`
+- `OPENAI_PLANNER_MODEL` (`gpt-4.1-mini`)
 - `GOOGLE_SERVICE_ACCOUNT_FILE`
 - `GOOGLE_DRIVE_FOLDER_ID`
 - `GOOGLE_SERVICE_ACCOUNT_HOST_PATH`

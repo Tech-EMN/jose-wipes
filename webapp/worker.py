@@ -23,7 +23,7 @@ _project_root = Path(__file__).parent.parent.resolve()
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from scripts.config import OUTPUT_DIR, LOGS_DIR
+from scripts.config import OUTPUT_DIR, LOGS_DIR, OPENAI_PLANNER_MODEL
 from webapp.job_manager import FilePollingJobManager
 
 _log = logging.getLogger("jose-wipes-worker")
@@ -97,6 +97,7 @@ def main() -> int:
 
     _log.info("José Wipes Worker starting (poll interval=%ds, grace=%ds)",
               POLL_INTERVAL_SECONDS, SHUTDOWN_GRACE_SECONDS)
+    _log.info("Planner model: %s", OPENAI_PLANNER_MODEL)
 
     jobs_dir = OUTPUT_DIR / "web_jobs"
     manager = FilePollingJobManager(
