@@ -35,11 +35,10 @@ class TestUploadReferenceImageRetry:
         test_file = tmp_path / "test.png"
         test_file.write_text("fake image data")
 
-        sys.modules["higgsfield_client"].upload_file = MagicMock(
-            return_value="https://cdn.example.com/img.png"
-        )
-
-        with patch("time.sleep") as mock_sleep:
+        with patch(
+            "webapp.pipeline_service.upload_higgsfield_file",
+            return_value="https://cdn.example.com/img.png",
+        ), patch("time.sleep") as mock_sleep:
             result = _upload_reference_image(str(test_file))
             assert result == "https://cdn.example.com/img.png"
             mock_sleep.assert_not_called()
@@ -59,9 +58,7 @@ class TestUploadReferenceImageRetry:
                 raise ConnectionError(f"Timeout attempt {call_count[0]}")
             return "https://cdn.example.com/retry_success.png"
 
-        sys.modules["higgsfield_client"].upload_file = mock_upload
-
-        with patch("time.sleep") as mock_sleep:
+        with patch("webapp.pipeline_service.upload_higgsfield_file", side_effect=mock_upload), patch("time.sleep") as mock_sleep:
             result = _upload_reference_image(str(test_file))
             assert result == "https://cdn.example.com/retry_success.png"
             assert call_count[0] == 3
@@ -81,9 +78,7 @@ class TestUploadReferenceImageRetry:
             call_count[0] += 1
             raise ConnectionError(f"Always fails {call_count[0]}")
 
-        sys.modules["higgsfield_client"].upload_file = mock_upload
-
-        with patch("time.sleep"):
+        with patch("webapp.pipeline_service.upload_higgsfield_file", side_effect=mock_upload), patch("time.sleep"):
             result = _upload_reference_image(str(test_file))
             assert result is None
             assert call_count[0] == 3
@@ -103,9 +98,7 @@ class TestUploadReferenceImageRetry:
                 raise ConnectionError(f"Fail {call_count[0]}")
             return "https://cdn.example.com/ok.png"
 
-        sys.modules["higgsfield_client"].upload_file = mock_upload
-
-        with patch("time.sleep") as mock_sleep:
+        with patch("webapp.pipeline_service.upload_higgsfield_file", side_effect=mock_upload), patch("time.sleep") as mock_sleep:
             _upload_reference_image(str(test_file))
             expected_delays = [2.0, 4.0]  # 2 attempts fail, then success
             actual_delays = [c[0][0] for c in mock_sleep.call_args_list]
@@ -124,9 +117,7 @@ class TestUploadReferenceImageRetry:
             call_count[0] += 1
             raise ConnectionError("Network error")
 
-        sys.modules["higgsfield_client"].upload_file = mock_upload
-
-        with patch("time.sleep"):
+        with patch("webapp.pipeline_service.upload_higgsfield_file", side_effect=mock_upload), patch("time.sleep"):
             result = _upload_reference_image(str(test_file))
             assert result is None
             assert call_count[0] == 3

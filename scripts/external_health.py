@@ -69,7 +69,8 @@ def probe_external_health(
     }
 
     ready_for_submit = all(
-        services[name].ok for name in ("ffmpeg", "openai", "higgsfield_auth")
+        services[name].ok
+        for name in ("ffmpeg", "openai", "higgsfield_auth", "elevenlabs")
     )
     return ExternalHealthResponse(
         ready_for_submit=ready_for_submit,

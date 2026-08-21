@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
 from openai import OpenAI
@@ -28,6 +29,69 @@ from webapp.schemas import CreateJobRequest, PlannerOutput, PlannerShot, Product
 PLANNER_MODEL = OPENAI_PLANNER_MODEL
 SHOT_BLOCK_SECONDS = 5
 ALLOWED_PRODUCT_POSITIONS = {"centro", "centro_inferior", "direita", "esquerda"}
+NO_TEXT_PATTERNS = (
+    re.compile(r"\bsem\s+(?:qualquer\s+)?textos?\b", re.IGNORECASE),
+    re.compile(r"\bsem\s+(?:legendas?|tipografia)\b", re.IGNORECASE),
+    re.compile(
+        r"\bn[aã]o\s+(?:mostre|exiba|inclua|adicione|use)\b[^.!?\n]{0,120}"
+        r"\b(?:textos?|legendas?|tipografia)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:no|without)\s+(?:on[- ]screen\s+)?(?:text|captions?|titles?|typography)\b",
+        re.IGNORECASE,
+    ),
+)
+NO_NARRATION_PATTERNS = (
+    re.compile(r"\bsem\s+(?:qualquer\s+)?narra[cç][aã]o\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:no|without)\s+(?:narration|voice[- ]?over|dialogue|speech)\b",
+        re.IGNORECASE,
+    ),
+)
+NO_TEXT_VISUAL_CONSTRAINT = (
+    "No captions, subtitles, title cards, floating typography, watermarks, "
+    "or other added on-screen text."
+)
+NO_NARRATION_VISUAL_CONSTRAINT = (
+    "Ambient sound only. No narration, voice-over, dialogue, vocals, or human speech."
+)
+PRODUCT_COMPOSITING_VISUAL_CONSTRAINT = (
+    "The placement area is reserved for post-production compositing. Render only "
+    "the surrounding scene, background, lighting, and shadows with a locked-off "
+    "camera. Create subtle motion only through gradual light and shadow changes. "
+    "Keep that area completely empty, with no foreground subject, branded object, "
+    "container, placeholder object, or object-shaped silhouette."
+)
+PRODUCT_RENDER_KEYWORDS = (
+    "product",
+    "logo",
+    "label",
+    "typography",
+    "branding",
+    "brand name",
+    "wrapper",
+    "container",
+    "flip-top",
+    "lid",
+    "shield",
+)
+PRODUCT_POSITION_PROMPTS = {
+    "centro": "central",
+    "centro_inferior": "lower central",
+    "direita": "right-side",
+    "esquerda": "left-side",
+}
+COMPOSITING_CAMERA_MOTION_KEYWORDS = (
+    "camera movement",
+    "dolly",
+    "handheld",
+    "pan ",
+    "rack focus",
+    "steadicam",
+    "tracking shot",
+    "zoom",
+)
 
 # Palavras por segundo confortáveis para o ElevenLabs multilingual em pt-BR
 # considerando pausas dramáticas — ~2.0 wps mantém a fala dentro do shot.
@@ -81,6 +145,79 @@ def _voice_catalog_text() -> str:
 
 def _expected_shot_count(duration_seconds: int) -> int:
     return duration_seconds // SHOT_BLOCK_SECONDS
+
+
+def _briefing_proibe_texto(*texts: str | None) -> bool:
+    combined = " ".join(text for text in texts if text)
+    return any(pattern.search(combined) for pattern in NO_TEXT_PATTERNS)
+
+
+def _briefing_proibe_narracao(*texts: str | None) -> bool:
+    combined = " ".join(text for text in texts if text)
+    return any(pattern.search(combined) for pattern in NO_NARRATION_PATTERNS)
+
+
+def _preparar_prompt_para_composicao(
+    shot: PlannerShot,
+    global_style: str,
+) -> PlannerShot:
+    if not shot.product_overlay.ativo:
+        return shot
+
+    product_overlay = shot.product_overlay
+    if not _shot_descreve_gesto(shot):
+        product_overlay = ProductOverlayConfig(
+            ativo=True,
+            posicao=(
+                "centro_inferior"
+                if shot.product_overlay.posicao == "centro"
+                else shot.product_overlay.posicao
+            ),
+            tamanho_pct=max(shot.product_overlay.tamanho_pct, 70),
+            inicio_seg=0.0,
+        )
+
+    sentences = re.split(r"(?<=[.!?])\s+", shot.visual_prompt_en.strip())
+    safe_sentences = [
+        sentence
+        for sentence in sentences
+        if not prompt_pede_referencia_produto(sentence)
+        and not any(keyword in sentence.lower() for keyword in PRODUCT_RENDER_KEYWORDS)
+        and not any(
+            keyword in sentence.lower()
+            for keyword in COMPOSITING_CAMERA_MOTION_KEYWORDS
+        )
+    ]
+    background_prompt = " ".join(safe_sentences).strip()
+    if len(background_prompt) < 20:
+        safe_style = (
+            global_style
+            if not prompt_pede_referencia_produto(global_style)
+            and not any(
+                keyword in global_style.lower()
+                for keyword in COMPOSITING_CAMERA_MOTION_KEYWORDS
+            )
+            else "cinematic lighting and premium commercial styling"
+        )
+        background_prompt = (
+            "An empty premium commercial scene guided by this art direction: "
+            f"{safe_style.rstrip('.')}."
+        )
+
+    placement = PRODUCT_POSITION_PROMPTS[product_overlay.posicao]
+    visual_prompt = (
+        f"{background_prompt.rstrip()} Keep a clean empty {placement} placement area "
+        f"on the primary surface. {PRODUCT_COMPOSITING_VISUAL_CONSTRAINT}"
+    )
+    if NO_TEXT_VISUAL_CONSTRAINT in shot.visual_prompt_en:
+        visual_prompt = f"{visual_prompt} {NO_TEXT_VISUAL_CONSTRAINT}"
+
+    return shot.model_copy(
+        update={
+            "visual_prompt_en": visual_prompt,
+            "product_overlay": product_overlay,
+        }
+    )
 
 
 def _planner_system_prompt(*, orientation: str = "vertical") -> str:
@@ -336,12 +473,17 @@ def plan_web_video(
     shot_count = _expected_shot_count(request.duration_seconds)
     product_reference_required = prompt_pede_referencia_produto(request.prompt, pdf_text)
     product_reference_matches = detectar_gatilhos_referencia_produto(request.prompt, pdf_text)
+    text_overlay_forbidden = _briefing_proibe_texto(request.prompt, pdf_text)
+    narration_forbidden = _briefing_proibe_narracao(request.prompt, pdf_text)
 
     user_payload = {
         "briefing_usuario": request.prompt,
         "roteiro_pdf_contexto": pdf_text or None,
         "product_reference_required": product_reference_required,
         "product_reference_triggers": product_reference_matches,
+        "product_render_strategy": "background_only_then_official_overlay",
+        "text_overlay_forbidden": text_overlay_forbidden,
+        "narration_forbidden": narration_forbidden,
         "duracao_total_segundos": request.duration_seconds,
         "shots_necessarios": shot_count,
         "resolucao_desejada": request.resolution,
@@ -419,12 +561,19 @@ def plan_web_video(
         trimmed_narration = _trim_narration_to_fit(
             shot.narration_text_pt, SHOT_BLOCK_SECONDS
         )
+        visual_prompt = shot.visual_prompt_en
+        if text_overlay_forbidden and NO_TEXT_VISUAL_CONSTRAINT not in visual_prompt:
+            visual_prompt = f"{visual_prompt.rstrip()} {NO_TEXT_VISUAL_CONSTRAINT}"
+        if narration_forbidden and NO_NARRATION_VISUAL_CONSTRAINT not in visual_prompt:
+            visual_prompt = f"{visual_prompt.rstrip()} {NO_NARRATION_VISUAL_CONSTRAINT}"
         normalized_shots.append(
             shot.model_copy(
                 update={
                     "shot_number": index,
                     "duration_seconds": SHOT_BLOCK_SECONDS,
-                    "narration_text_pt": trimmed_narration,
+                    "narration_text_pt": "" if narration_forbidden else trimmed_narration,
+                    "visual_prompt_en": visual_prompt,
+                    "overlay_text": None if text_overlay_forbidden else shot.overlay_text,
                 }
             )
         )
@@ -456,9 +605,10 @@ def plan_web_video(
         update={"shots": [_ajustar_overlay_para_gesto(shot) for shot in plan.shots]}
     )
 
-    last_shot = plan.shots[-1]
-    if not last_shot.overlay_text:
-        plan.shots[-1] = last_shot.model_copy(update={"overlay_text": plan.final_cta_pt})
+    if not text_overlay_forbidden:
+        last_shot = plan.shots[-1]
+        if not last_shot.overlay_text:
+            plan.shots[-1] = last_shot.model_copy(update={"overlay_text": plan.final_cta_pt})
 
     if product_reference_required and not plan.shots[-1].product_overlay.ativo:
         last_shot = plan.shots[-1]
@@ -472,5 +622,14 @@ def plan_web_video(
                 )
             }
         )
+
+    plan = plan.model_copy(
+        update={
+            "shots": [
+                _preparar_prompt_para_composicao(shot, plan.global_style)
+                for shot in plan.shots
+            ]
+        }
+    )
 
     return plan

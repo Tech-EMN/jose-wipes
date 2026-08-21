@@ -9,7 +9,7 @@ from datetime import datetime
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from scripts.config import OUTPUT_DIR, ASSETS_DIR, obter_logo_path, obter_path_imagem_produto
+from scripts.config import OUTPUT_DIR, ASSETS_DIR, obter_path_imagem_produto
 
 # Flag do Windows para não abrir janela de console
 _NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -34,6 +34,31 @@ def _subprocess_run(cmd, **kwargs):
 def log(msg):
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"  [{ts}] {msg}")
+
+
+def _obter_dimensoes_video(video_path):
+    try:
+        probe = _subprocess_run(
+            [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "json",
+                str(video_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        stream = json.loads(probe.stdout)["streams"][0]
+        return int(stream["width"]), int(stream["height"])
+    except (subprocess.SubprocessError, OSError, ValueError, TypeError, KeyError, IndexError):
+        return None
 
 
 def _detectar_crop_sem_letterbox(input_path, sample_seconds=4):
@@ -88,7 +113,12 @@ def normalizar_cena(input_path, output_path, largura=1080, altura=1920, fps=24):
     )
     has_audio = '"codec_type"' in probe.stdout
 
-    pre_crop = _detectar_crop_sem_letterbox(input_path)
+    dimensions = _obter_dimensoes_video(input_path)
+    pre_crop = (
+        None
+        if dimensions == (largura, altura)
+        else _detectar_crop_sem_letterbox(input_path)
+    )
     pre_filter = f"crop={pre_crop}," if pre_crop else ""
     if pre_crop:
         log(f"Letterbox detectado, removendo barras: {pre_crop}")
@@ -177,7 +207,9 @@ def adicionar_logo_overlay(video_path, logo_path, output_path, posicao="inferior
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if logo_path is None:
-        logo_path = obter_logo_path()
+        import shutil
+        shutil.copy2(video_path, output_path)
+        return output_path
     logo_path = Path(logo_path)
 
     if not logo_path.exists():
@@ -321,34 +353,57 @@ def overlay_produto(video_path, output_path, produto_path=None,
 
     # Posições
     pos_map = {
-        "centro": "(W-w)/2:(H-h)/2",
-        "centro_inferior": "(W-w)/2:H-h-150",
-        "direita": "W-w-60:(H-h)/2",
-        "esquerda": "60:(H-h)/2",
+        "centro": ("(W-w)/2", "(H-h)/2"),
+        "centro_inferior": ("(W-w)/2", "H-h-150"),
+        "direita": ("W-w-60", "(H-h)/2"),
+        "esquerda": ("60", "(H-h)/2"),
     }
-    pos = pos_map.get(posicao, pos_map["centro"])
+    x_pos, y_pos = pos_map.get(posicao, pos_map["centro"])
 
     # Escalar produto para % da largura do vídeo, com fade in suave a partir de inicio_seg
+    dimensions = _obter_dimensoes_video(video_path)
+    if dimensions is None:
+        log(f"Não foi possível obter as dimensões do vídeo ({video_path})")
+        return None
+    product_width = max(1, round(dimensions[0] * float(tamanho_pct) / 100))
     fade_dur = max(0.0, float(fade_in or 0.0))
+    still_image_filter = "[1:v]loop=loop=-1:size=1:start=0,setpts=N/(24*TB),"
     if inicio_seg is not None and float(inicio_seg) > 0:
         start = float(inicio_seg)
         if fade_dur > 0:
             scale_filter = (
-                f"[1:v]scale=iw*{tamanho_pct}/100:-1,format=rgba,"
-                f"fade=t=in:st={start}:d={fade_dur}:alpha=1[prod]"
+                f"{still_image_filter}scale={product_width}:-1,format=rgba,"
+                f"fade=t=in:st={start}:d={fade_dur}:alpha=1,"
+                "split=2[prod][shadow_src]"
             )
         else:
             scale_filter = (
-                f"[1:v]scale=iw*{tamanho_pct}/100:-1,format=rgba[prod]"
+                f"{still_image_filter}scale={product_width}:-1,format=rgba,"
+                "split=2[prod][shadow_src]"
             )
-        overlay_filter = (
-            f"[0:v][prod]overlay={pos}:enable='gte(t,{start})':format=auto[out]"
-        )
+        enable_filter = f":enable='gte(t,{start})'"
     else:
-        scale_filter = f"[1:v]scale=iw*{tamanho_pct}/100:-1[prod]"
-        overlay_filter = f"[0:v][prod]overlay={pos}:format=auto[out]"
+        scale_filter = (
+            f"{still_image_filter}scale={product_width}:-1,format=rgba,"
+            "split=2[prod][shadow_src]"
+        )
+        enable_filter = ""
 
-    filter_complex = f"{scale_filter};{overlay_filter}"
+    shadow_filter = (
+        "[shadow_src]colorchannelmixer=rr=0:gg=0:bb=0:aa=0.3,"
+        "gblur=sigma=12[shadow]"
+    )
+    shadow_overlay = (
+        f"[0:v][shadow]overlay=({x_pos})+8:({y_pos})+18"
+        f"{enable_filter}:format=auto:shortest=1[with_shadow]"
+    )
+    product_overlay = (
+        f"[with_shadow][prod]overlay={x_pos}:{y_pos}"
+        f"{enable_filter}:format=auto:shortest=1[out]"
+    )
+    filter_complex = ";".join(
+        (scale_filter, shadow_filter, shadow_overlay, product_overlay)
+    )
 
     try:
         _subprocess_run([
@@ -458,8 +513,63 @@ def gerar_card_logo(output_path, logo_path, duracao=3, largura=1080, altura=1920
         return None
 
 
+def _limitar_duracao(video_path, duracao_segundos):
+    video_path = Path(video_path)
+    trimmed_path = video_path.with_name(f"_{video_path.stem}_trimmed{video_path.suffix}")
+    target_duration = f"{float(duracao_segundos):.3f}"
+
+    try:
+        _subprocess_run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(video_path),
+                "-vf",
+                (
+                    f"tpad=stop_mode=clone:stop_duration={target_duration},"
+                    f"trim=duration={target_duration},setpts=PTS-STARTPTS"
+                ),
+                "-af",
+                (
+                    f"apad=pad_dur={target_duration},"
+                    f"atrim=duration={target_duration},asetpts=PTS-STARTPTS"
+                ),
+                "-t",
+                target_duration,
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a?",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-ar",
+                "44100",
+                "-movflags",
+                "+faststart",
+                str(trimmed_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=300,
+        )
+        trimmed_path.replace(video_path)
+        log(f"✓ Duração ajustada para {target_duration}s")
+        return video_path
+    except (subprocess.CalledProcessError, OSError) as exc:
+        trimmed_path.unlink(missing_ok=True)
+        log(f"✗ Ajuste de duração falhou: {exc}")
+        return None
+
+
 def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
-                       largura=1080, altura=1920, fps=24, output_dir=None):
+                       largura=1080, altura=1920, fps=24, output_dir=None,
+                       duracao_maxima=None):
     """Pipeline completo: normalizar → concatenar → logo → exportar. Retorna path ou None."""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     titulo_safe = "".join(c if c.isalnum() or c in "_ -" else "_" for c in titulo)
@@ -500,6 +610,13 @@ def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
     result = adicionar_logo_overlay(concat_path, logo_path, final_path)
     if not result:
         final_path = concat_path  # usar sem logo
+
+    if duracao_maxima is not None:
+        result = _limitar_duracao(final_path, duracao_maxima)
+        if not result:
+            _cleanup(temp_files)
+            return None
+        final_path = result
 
     # 4. Info do resultado
     try:

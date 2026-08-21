@@ -14,6 +14,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -103,11 +104,11 @@ def main() -> int:
         poll_interval=POLL_INTERVAL_SECONDS,
     )
 
-    shutdown_requested = threading.Event() if "threading" in sys.modules else None
+    shutdown_requested = threading.Event()
 
     def _handle_signal(signum, frame):
         _log.info("Received signal %d, shutting down gracefully...", signum)
-        manager.stop()
+        shutdown_requested.set()
 
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
@@ -117,17 +118,18 @@ def main() -> int:
 
     try:
         manager.start()
-        # start() blocks until stop() is called
+        shutdown_requested.wait()
     except KeyboardInterrupt:
         _log.info("Worker interrupted")
     except Exception:
         _log.exception("Worker crashed")
         return 1
+    finally:
+        manager.stop()
 
     _log.info("Worker stopped")
     return 0
 
 
 if __name__ == "__main__":
-    import threading  # for signal handling
     sys.exit(main())

@@ -16,6 +16,7 @@ from scripts.product_reference import (
     prompt_pede_referencia_produto,
 )
 from scripts.openai_utils import create_text_response
+from scripts.higgsfield_utils import upload_higgsfield_file
 
 # Fix Windows console encoding
 if sys.stdout.encoding != "utf-8":
@@ -43,6 +44,14 @@ OPENAI_PLANNER_MODEL = os.getenv("OPENAI_PLANNER_MODEL", "gpt-4.1-mini")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "")
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
+GOOGLE_OAUTH_CLIENT_FILE = os.getenv(
+    "GOOGLE_OAUTH_CLIENT_FILE",
+    "./credentials/google-oauth-client.json",
+)
+GOOGLE_OAUTH_TOKEN_FILE = os.getenv(
+    "GOOGLE_OAUTH_TOKEN_FILE",
+    "./credentials/google-oauth-token.json",
+)
 
 # Garantir que diretórios existem
 for d in [ASSETS_DIR, OUTPUT_DIR, OUTPUT_DIR / "cenas", OUTPUT_DIR / "final",
@@ -261,9 +270,7 @@ def obter_url_imagem_produto() -> str:
     ):
         return _product_image_url_cache
 
-    import higgsfield_client
-
-    url = higgsfield_client.upload_file(str(product_image_path))
+    url = upload_higgsfield_file(product_image_path)
     _product_image_url_cache = url
     obter_url_imagem_produto._cached_path = str(product_image_path)
     return url

@@ -112,6 +112,7 @@ class JobStatusResponse(BaseModel):
     enhanced_brief: str | None = None
     preview_url: str | None = None
     download_url: str | None = None
+    drive_url: str | None = None
     error_message: str | None = None
     failed_stage: str | None = None
     failed_service: str | None = None

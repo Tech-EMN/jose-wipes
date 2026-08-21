@@ -17,14 +17,36 @@ from scripts.openai_utils import classify_openai_exception, create_text_response
 class FakeResponses:
     def __init__(self, response):
         self._response = response
+        self.kwargs = {}
 
     def create(self, **kwargs):
+        self.kwargs = kwargs
         return self._response
 
 
 class FakeClient:
     def __init__(self, response):
         self.responses = FakeResponses(response)
+
+
+def test_create_text_response_omits_reasoning_parameter():
+    response = type(
+        "Response",
+        (),
+        {"status": "completed", "output_text": "ok", "output": []},
+    )()
+    client = FakeClient(response)
+
+    result = create_text_response(
+        client=client,
+        model="gpt-4.1-mini",
+        instructions="Reply briefly.",
+        user_input="Reply ok.",
+        max_output_tokens=20,
+    )
+
+    assert result == "ok"
+    assert "reasoning" not in client.responses.kwargs
 
 
 def main():

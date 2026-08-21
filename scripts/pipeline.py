@@ -30,6 +30,7 @@ from scripts.compositor import (
     gerar_card_final_com_produto, compor_produto_na_imagem
 )
 from scripts.uploader import upload_para_drive
+from scripts.higgsfield_utils import upload_higgsfield_file
 
 
 def executar_pipeline(briefing=None, plano=None):
@@ -143,8 +144,7 @@ def executar_pipeline(briefing=None, plano=None):
                         print(f"  Produto real composto na imagem")
 
                 # Upload da imagem para animar
-                import higgsfield_client
-                img_url = higgsfield_client.upload_file(str(img_path))
+                img_url = upload_higgsfield_file(img_path)
                 print(f"  Etapa 2: Animando com {modelo}...")
                 video_path = gerar_video_higgsfield(
                     modelo, prompt, aspecto, resolucao, duracao,

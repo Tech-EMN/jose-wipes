@@ -21,6 +21,7 @@ from scripts.config import (
     obter_path_imagem_produto,
 )
 from scripts.openai_utils import create_text_response
+from scripts.higgsfield_utils import upload_higgsfield_file
 
 
 def check_env():
@@ -90,10 +91,8 @@ def check_higgsfield():
     if not HF_API_KEY or HF_API_KEY.startswith("your_"):
         return False, "API key nao configurada"
     try:
-        import higgsfield_client
-
         product_path = obter_path_imagem_produto(strict=True)
-        url = higgsfield_client.upload_file(str(product_path))
+        url = upload_higgsfield_file(product_path)
         if url and str(url).startswith("http"):
             return True, "Upload autenticado da referencia do produto OK (auth basica confirmada)"
         return False, f"Upload retornou valor inesperado: {url}"

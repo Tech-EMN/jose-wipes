@@ -21,6 +21,8 @@ from scripts.gerador_midia import (
     gerar_video_higgsfield,
 )
 from scripts.integration_errors import IntegrationFailure
+from scripts.higgsfield_utils import upload_higgsfield_file
+from scripts.uploader import upload_para_drive
 from webapp.model_registry import VideoModelConfig
 from webapp.schemas import CreateJobRequest, PlannerOutput
 
@@ -37,6 +39,7 @@ def _gerar_video_com_fallback(
     duracao: int,
     output_path: str,
     reference_image_url: str | None,
+    reference_image_path: Path | None,
     extra_arguments: dict,
 ) -> "Path | None":
     """Generate video with automatic fallback using VideoGenerator interface."""
@@ -66,6 +69,7 @@ def _gerar_video_com_fallback(
                 duration_seconds=duracao,
                 output_path=Path(output_path),
                 reference_image_url=reference_image_url,
+                reference_image_path=reference_image_path,
             )
             result = generator.generate(request)
             return result.output_path
@@ -121,8 +125,7 @@ def _upload_reference_image(image_path: str | Path | None) -> str | None:
 
     for attempt in range(1, max_retries + 1):
         try:
-            import higgsfield_client
-            url = higgsfield_client.upload_file(str(path))
+            url = upload_higgsfield_file(path)
             if attempt > 1:
                 _log.info(
                     "Reference image upload succeeded on attempt %d/%d",
@@ -179,9 +182,10 @@ def render_planned_video(
     # Determine which reference image to use for product shots
     # Priority: user-uploaded embalagem > default product image
     reference_image_url = None
+    reference_image_path = None
     shot_reference_flags = [
-        shot.product_overlay.ativo
-        or prompt_pede_referencia_produto(
+        not shot.product_overlay.ativo
+        and prompt_pede_referencia_produto(
             shot.visual_prompt_en,
             shot.narration_text_pt,
             shot.overlay_text,
@@ -192,6 +196,7 @@ def render_planned_video(
 
     if any(shot_reference_flags):
         if ref_embalagem_path:
+            reference_image_path = Path(ref_embalagem_path)
             # Upload user-provided packaging image
             if progress_cb:
                 progress_cb("uploading_ref", "Enviando imagem da embalagem como referência...")
@@ -205,6 +210,9 @@ def render_planned_video(
                 except Exception as exc:
                     warnings.append(f"Referência visual do produto indisponível: {exc}")
         else:
+            default_product = obter_path_imagem_produto()
+            if default_product and Path(default_product).exists():
+                reference_image_path = Path(default_product)
             try:
                 reference_image_url = obter_url_imagem_produto()
             except Exception as exc:
@@ -241,6 +249,7 @@ def render_planned_video(
             duracao=shot.duration_seconds,
             output_path=f"{base_path}.mp4",
             reference_image_url=reference_image_url if should_use_reference else None,
+            reference_image_path=reference_image_path if should_use_reference else None,
             extra_arguments=model_config.default_arguments,
         )
         if not video_path:
@@ -338,9 +347,18 @@ def render_planned_video(
         largura=largura,
         altura=altura,
         output_dir=final_dir,
+        duracao_maxima=request.duration_seconds,
     )
     if not final_video:
         raise RuntimeError("Falha na composição do vídeo final.")
+
+    if progress_cb:
+        progress_cb("uploading_drive", "Enviando vídeo final para o Google Drive...")
+    drive_result = upload_para_drive(final_video)
+    if not drive_result:
+        warnings.append(
+            "O vídeo foi concluído localmente, mas o upload para o Google Drive falhou."
+        )
 
     manifest_path = job_dir / "manifesto_render.json"
     manifest_path.write_text(
@@ -353,6 +371,7 @@ def render_planned_video(
                 "resolucao": request.resolution,
                 "cenas": rendered_scenes,
                 "saida_final": str(final_video),
+                "google_drive": drive_result,
                 "ref_embalagem_usada": ref_embalagem_path or "padrão",
                 "ref_logo_usada": str(logo_path_to_use) if logo_path_to_use else "nenhuma",
                 "logo_overlay_aplicado": apply_logo_overlay,
@@ -366,5 +385,7 @@ def render_planned_video(
 
     return {
         "final_video_path": str(final_video),
+        "drive_file_id": drive_result.get("id") if drive_result else None,
+        "drive_url": drive_result.get("link") if drive_result else None,
         "warnings": warnings,
     }

@@ -245,6 +245,7 @@ def combinar_video_audio(video_path, audio_path, output_path, max_extra_seconds=
             f"  Áudio ({audio_dur:.2f}s) maior que vídeo ({video_dur:.2f}s); "
             f"congelando último frame por +{extra:.2f}s"
         )
+    target_duration = video_dur + extra if video_dur is not None else None
 
     cmd = [
         "ffmpeg", "-y",
@@ -253,14 +254,24 @@ def combinar_video_audio(video_path, audio_path, output_path, max_extra_seconds=
     ]
 
     if extra > 0:
-        # Re-encoda o vídeo com tpad para clonar o último frame
         cmd += [
             "-filter_complex",
-            f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.2f},setsar=1[v]",
+            (
+                f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f},"
+                f"trim=duration={target_duration:.3f},setsar=1[v]"
+            ),
             "-map", "[v]", "-map", "1:a:0",
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac",
-            "-shortest",
+            "-af", f"apad=pad_dur={target_duration:.3f}",
+            "-t", f"{target_duration:.3f}",
+        ]
+    elif target_duration is not None:
+        cmd += [
+            "-c:v", "copy", "-c:a", "aac",
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-af", f"apad=pad_dur={target_duration:.3f}",
+            "-t", f"{target_duration:.3f}",
         ]
     else:
         cmd += [

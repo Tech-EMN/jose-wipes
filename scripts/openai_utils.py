@@ -32,7 +32,6 @@ def create_text_response(
     instructions: str,
     user_input: str,
     max_output_tokens: int,
-    reasoning_effort: str = "medium",
 ) -> str:
     """Create a plain-text response using the OpenAI Responses API."""
     try:
@@ -41,7 +40,6 @@ def create_text_response(
             instructions=instructions,
             input=user_input,
             max_output_tokens=max_output_tokens,
-            reasoning={"effort": reasoning_effort},
         )
     except Exception as exc:
         raise classify_openai_exception(exc) from exc
