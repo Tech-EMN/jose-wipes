@@ -78,6 +78,29 @@ class TestHiggsfieldVideoGenerator:
 
 
 class TestOpenAISoraVideoGenerator:
+    def test_sora_pro_requests_native_vertical_1080p(self, tmp_path):
+        output_path = tmp_path / "video.mp4"
+        client = MagicMock()
+        client.videos.create_and_poll.return_value.id = "video-id"
+        client.videos.download_content.return_value.write_to_file.side_effect = (
+            lambda path: Path(path).write_bytes(b"video")
+        )
+
+        with patch("scripts.config.OPENAI_API_KEY", "test-key"), patch(
+            "openai.OpenAI", return_value=client
+        ):
+            OpenAISoraVideoGenerator("sora-2-pro").generate(
+                VideoGenerationRequest(
+                    prompt="test prompt",
+                    aspect_ratio="9:16",
+                    resolution="1080p",
+                    duration_seconds=4,
+                    output_path=output_path,
+                )
+            )
+
+        assert client.videos.create_and_poll.call_args.kwargs["size"] == "1080x1920"
+
     def test_uses_local_reference_and_writes_download(self, tmp_path):
         reference_path = tmp_path / "reference.png"
         reference_path.write_bytes(b"image")

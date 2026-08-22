@@ -8,7 +8,7 @@ import httpx
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from openai import APIConnectionError
+from openai import APIConnectionError, RateLimitError
 
 from scripts.integration_errors import IntegrationFailure, classify_higgsfield_exception
 from scripts.openai_utils import classify_openai_exception, create_text_response
@@ -47,6 +47,22 @@ def test_create_text_response_omits_reasoning_parameter():
 
     assert result == "ok"
     assert "reasoning" not in client.responses.kwargs
+
+
+def test_openai_exhausted_credits_are_not_retryable():
+    request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    response = httpx.Response(429, request=request)
+    failure = classify_openai_exception(
+        RateLimitError(
+            "You have no credits remaining. code: credit_balance_exhausted",
+            response=response,
+            body={"code": "credit_balance_exhausted"},
+        )
+    )
+
+    assert failure.code == "insufficient_quota"
+    assert failure.retryable is False
+    assert failure.reason == "credit_balance_exhausted"
 
 
 def main():

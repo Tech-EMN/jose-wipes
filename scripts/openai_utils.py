@@ -85,6 +85,7 @@ def classify_openai_exception(exc: Exception, *, stage: str = "planning") -> Int
     from openai import APIConnectionError, AuthenticationError, RateLimitError
 
     message = str(exc).strip() or exc.__class__.__name__
+    lowered = message.lower()
 
     if isinstance(exc, APIConnectionError):
         return IntegrationFailure(
@@ -99,6 +100,26 @@ def classify_openai_exception(exc: Exception, *, stage: str = "planning") -> Int
         )
 
     if isinstance(exc, RateLimitError):
+        if any(
+            marker in lowered
+            for marker in (
+                "credit_balance_exhausted",
+                "insufficient_quota",
+                "no credits remaining",
+            )
+        ):
+            return IntegrationFailure(
+                service="openai",
+                stage=stage,
+                code="insufficient_quota",
+                user_message="A conta OpenAI está sem créditos. Adicione saldo antes de tentar novamente.",
+                technical_message=message,
+                retryable=False,
+                auth_confirmed=True,
+                submit_confirmed=False,
+                render_confirmed=False,
+                reason="credit_balance_exhausted",
+            )
         return IntegrationFailure(
             service="openai",
             stage=stage,

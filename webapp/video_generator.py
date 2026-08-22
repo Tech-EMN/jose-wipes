@@ -120,12 +120,12 @@ class OpenAISoraVideoGenerator(VideoGenerator):
     """OpenAI Sora implementation of the VideoGenerator interface."""
 
     # sora-2 só suporta 720x1280 / 1280x720
-    # sora-2-pro suporta todas: 720x1280, 1280x720, 1024x1792, 1792x1024
+    # sora-2-pro suporta todas: 720x1280, 1280x720, 1080x1920, 1920x1080
     SORA_SIZES_PRO: dict[tuple[str, str], str] = {
         ("9:16", "720p"): "720x1280",
-        ("9:16", "1080p"): "1024x1792",
+        ("9:16", "1080p"): "1080x1920",
         ("16:9", "720p"): "1280x720",
-        ("16:9", "1080p"): "1792x1024",
+        ("16:9", "1080p"): "1920x1080",
     }
     SORA_SIZES_BASE: dict[tuple[str, str], str] = {
         ("9:16", "720p"): "720x1280",
@@ -227,8 +227,14 @@ class OpenAISoraVideoGenerator(VideoGenerator):
         try:
             video = client.videos.create_and_poll(**params)  # type: ignore[arg-type]
         except Exception as exc:
+            from scripts.openai_utils import classify_openai_exception
+
             error_msg = str(exc)
             error_lower = error_msg.lower()
+            classified = classify_openai_exception(exc, stage="generation")
+
+            if classified.code == "insufficient_quota":
+                raise classified from exc
 
             # Auth / permission errors are NOT retryable
             if "insufficient permissions" in error_lower or "401" in error_msg:
