@@ -68,11 +68,13 @@ Cadastre no projeto do app os valores de `.env.hostinger.example`:
 - `TZ`
 - `PYTHONUNBUFFERED`
 
-Se for usar upload automatico para Google Drive, adicione tambem:
+Para o upload no Shared Drive, adicione tambem:
 
-- `GOOGLE_SERVICE_ACCOUNT_FILE=credentials/service-account.json`
-- `GOOGLE_DRIVE_FOLDER_ID`
+- `GOOGLE_SERVICE_ACCOUNT_FILE=/app/credentials/service-account.json`
+- `GOOGLE_DRIVE_FOLDER_ID` com o ID da pasta de destino no Shared Drive
 - `GOOGLE_SERVICE_ACCOUNT_HOST_PATH=/opt/jose-wipes/credentials/service-account.json`
+
+A Atria deve conceder à service account permissão para criar arquivos nessa pasta. O JSON deve existir no caminho do host antes do deploy e não deve ser enviado ao Git.
 
 Para gerar `TRAEFIK_BASIC_AUTH_USERS`, crie um hash `htpasswd` e escape `$` como `$$` antes de colar no Docker Manager.
 
@@ -81,13 +83,7 @@ Para gerar `TRAEFIK_BASIC_AUTH_USERS`, crie um hash `htpasswd` e escape `$` como
 1. Escolha `Compose from URL`.
 2. Aponte para o `raw` de `docker-compose.hostinger.yml` no GitHub.
 3. Salve o projeto e rode o deploy.
-4. Se for usar Google Drive, edite o compose no Docker Manager e descomente a linha do bind mount:
-
-```yaml
-- ${GOOGLE_SERVICE_ACCOUNT_HOST_PATH}:/app/credentials/service-account.json:ro
-```
-
-5. Redeploye o projeto depois de descomentar a linha acima.
+4. Confirme que `GOOGLE_SERVICE_ACCOUNT_HOST_PATH` aponta para o JSON existente no VPS. O compose monta essa credencial somente no worker.
 
 ## 4.1 Repositorio privado
 

@@ -100,3 +100,16 @@ class TestCICDWorkflow:
         assert compose.count("${OPENAI_PLANNER_MODEL:?OPENAI_PLANNER_MODEL must be set}") == 2
         assert "gpt-5.4-pro" not in env_example
         assert "gpt-5.4-pro" not in compose
+
+    def test_production_drive_credentials_are_required_only_by_worker(self):
+        root = Path(__file__).parent.parent
+        env_example = (root / ".env.hostinger.example").read_text(encoding="utf-8")
+        compose = (root / "docker-compose.hostinger.yml").read_text(encoding="utf-8")
+        web_section, worker_section = compose.split("  jose-wipes-worker:", 1)
+
+        assert "GOOGLE_SERVICE_ACCOUNT_FILE" not in web_section
+        assert "GOOGLE_DRIVE_FOLDER_ID" not in web_section
+        assert "GOOGLE_SERVICE_ACCOUNT_FILE: /app/credentials/service-account.json" in worker_section
+        assert "${GOOGLE_DRIVE_FOLDER_ID:?GOOGLE_DRIVE_FOLDER_ID must be set}" in worker_section
+        assert "${GOOGLE_SERVICE_ACCOUNT_HOST_PATH:?GOOGLE_SERVICE_ACCOUNT_HOST_PATH must be set}" in worker_section
+        assert "GOOGLE_SERVICE_ACCOUNT_FILE=/app/credentials/service-account.json" in env_example
