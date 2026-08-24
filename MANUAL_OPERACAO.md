@@ -4,6 +4,18 @@
 
 Este sistema transforma briefings em texto em vídeos comerciais da marca José Wipes usando inteligência artificial. Você escreve o que quer ("faz um vídeo de grupo de apoio de 30 segundos"), o sistema gera o roteiro, cria as cenas, monta o áudio e entrega o vídeo final pronto.
 
+## Critérios de entrega
+
+Um job só termina como `completed` quando:
+
+- todas as cenas planejadas foram geradas e compostas;
+- narração, embalagem e textos solicitados foram aplicados;
+- o MP4 final possui H.264, áudio AAC, duração válida e a resolução escolhida;
+- a saída vertical em 1080p mede exatamente `1080x1920`;
+- o upload obrigatório para o Google Drive foi concluído.
+
+Falha em qualquer etapa obrigatória encerra o job como `failed`. A meta operacional do desafio é concluir cada vídeo em até 20 minutos e comprovar pelo menos 80% de sucesso em uma amostra mínima de 10 jobs.
+
 ---
 
 ## Como gerar um vídeo
@@ -21,8 +33,8 @@ Este sistema transforma briefings em texto em vídeos comerciais da marca José 
    ```bash
    python scripts/pipeline.py "Seu briefing aqui"
    ```
-4. Espere 10-15 minutos
-5. O vídeo final estará em `output/final/` e no Google Drive (se configurado)
+4. Aguarde a conclusão, com meta máxima de 20 minutos
+5. O vídeo final estará em `output/final/` e no Google Drive
 
 ### 4 exemplos prontos para copiar/colar
 
@@ -101,10 +113,11 @@ O sistema já sabe pelo brandbook:
 
 ### 3. "Cena falhou na geração"
 - Pode ser limite de API ou modelo ocupado
-- O pipeline continua com as cenas que funcionaram
+- O job falha sem publicar um vídeo parcial
+- Falhas de rede durante o polling do Higgsfield consultam novamente o mesmo `request_id`, sem criar uma geração duplicada
 - Tente novamente em alguns minutos
 
-### 4. "JSON inválido do Claude"
+### 4. "JSON inválido do planner"
 - Raro, mas pode acontecer
 - Rode novamente — o resultado é diferente a cada vez
 - Se persistir, simplifique o briefing
@@ -117,7 +130,7 @@ O sistema já sabe pelo brandbook:
 |---|---|---|
 | Higgsfield | US$ 9-119/mês | Geração de vídeo/imagem |
 | ElevenLabs | US$ 22/mês | Vozes e áudio |
-| Anthropic (Claude) | US$ 20-50 (pay-per-use) | Decomposição de briefings |
+| OpenAI | Variável por uso | Planejamento de briefings e tiers Sora |
 | Google Cloud | Grátis (uso baixo) | Storage no Drive |
 | **Total** | **~US$ 50-190/mês** | |
 

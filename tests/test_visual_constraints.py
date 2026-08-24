@@ -3,13 +3,17 @@ import re
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from scripts.compositor import (
     _limitar_duracao,
     adicionar_logo_overlay,
+    compor_video_final,
     normalizar_cena,
     overlay_produto,
 )
 from scripts.gerador_midia import combinar_video_audio
+from scripts.integration_errors import IntegrationFailure
 from scripts.product_reference import prompt_pede_referencia_produto
 from webapp.model_registry import get_model_config
 from webapp.pipeline_service import render_planned_video
@@ -139,11 +143,12 @@ def test_product_overlay_replaces_generation_reference(tmp_path: Path) -> None:
     ) as generate_mock, patch(
         "webapp.pipeline_service.overlay_produto", side_effect=overlay
     ) as product_overlay_mock, patch(
-        "webapp.pipeline_service.gerar_card_logo", return_value=None
+        "webapp.pipeline_service.gerar_card_logo", return_value=product_path
     ), patch(
         "webapp.pipeline_service.compor_video_final", return_value=final_path
     ), patch(
-        "webapp.pipeline_service.upload_para_drive", return_value=None
+        "webapp.pipeline_service.upload_para_drive",
+        return_value={"id": "drive-id", "link": "https://drive.example/video"},
     ):
         render_planned_video(
             job_dir=tmp_path / "job",
@@ -157,6 +162,66 @@ def test_product_overlay_replaces_generation_reference(tmp_path: Path) -> None:
     assert generate_mock.call_args.kwargs["reference_image_url"] is None
     product_url_mock.assert_not_called()
     product_overlay_mock.assert_called_once()
+
+
+def test_compositor_rejects_partial_normalization(tmp_path: Path) -> None:
+    scene_paths = [tmp_path / "scene-1.mp4", tmp_path / "scene-2.mp4"]
+    for scene_path in scene_paths:
+        scene_path.write_bytes(b"video")
+
+    with patch(
+        "scripts.compositor.normalizar_cena",
+        side_effect=[tmp_path / "normalized.mp4", None],
+    ), patch("scripts.compositor.concatenar_cenas", return_value=None) as concat_mock:
+        result = compor_video_final(
+            scene_paths,
+            "Jose Wipes",
+            output_dir=tmp_path / "final",
+        )
+
+    assert result is None
+    concat_mock.assert_not_called()
+
+
+def test_render_requires_drive_delivery(tmp_path: Path) -> None:
+    plan = PlannerOutput(
+        title="Jose Wipes",
+        enhanced_brief_pt="Cena institucional.",
+        global_style="Minimalista.",
+        final_cta_pt="Jose Wipes.",
+        shots=[
+            PlannerShot(
+                shot_number=1,
+                visual_prompt_en="A clean monochrome studio scene with subtle camera movement.",
+            )
+        ],
+    )
+    generated_path = tmp_path / "generated.mp4"
+    generated_path.write_bytes(b"generated")
+    final_path = tmp_path / "final.mp4"
+    final_path.write_bytes(b"final")
+
+    with patch(
+        "webapp.pipeline_service._gerar_video_com_fallback",
+        return_value=generated_path,
+    ), patch(
+        "webapp.pipeline_service.obter_path_imagem_produto", return_value=None
+    ), patch(
+        "webapp.pipeline_service.compor_video_final", return_value=final_path
+    ), patch("webapp.pipeline_service.upload_para_drive", return_value=None), pytest.raises(
+        IntegrationFailure
+    ) as captured:
+        render_planned_video(
+            job_dir=tmp_path / "job",
+            request=_request("Crie uma cena institucional sem narração."),
+            plan=plan,
+            model_config=get_model_config("sora_2"),
+            apply_logo_overlay=False,
+        )
+
+    assert captured.value.service == "google_drive"
+    assert captured.value.code == "drive_upload_failed"
+    assert captured.value.render_confirmed is True
 
 
 def test_none_logo_path_copies_video_without_watermark(tmp_path: Path) -> None:

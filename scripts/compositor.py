@@ -591,7 +591,9 @@ def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
             normalizados.append(result)
             temp_files.append(norm_path)
         else:
-            log(f"Cena {i+1} falhou na normalização, pulando")
+            log(f"✗ Cena {i+1} falhou na normalização")
+            _cleanup(temp_files)
+            return None
 
     if not normalizados:
         log("✗ Nenhuma cena normalizada com sucesso!")
@@ -609,7 +611,8 @@ def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
     final_path = final_dir / f"{titulo_safe}_{ts}.mp4"
     result = adicionar_logo_overlay(concat_path, logo_path, final_path)
     if not result:
-        final_path = concat_path  # usar sem logo
+        _cleanup(temp_files)
+        return None
 
     if duracao_maxima is not None:
         result = _limitar_duracao(final_path, duracao_maxima)
@@ -622,16 +625,45 @@ def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
     try:
         probe = _subprocess_run(
             ["ffprobe", "-v", "quiet", "-print_format", "json",
-             "-show_format", str(final_path)],
+             "-show_format", "-show_streams", str(final_path)],
             capture_output=True, text=True, timeout=10
         )
         info = json.loads(probe.stdout)
         duracao = float(info.get("format", {}).get("duration", 0))
         tamanho = int(info.get("format", {}).get("size", 0)) / (1024 * 1024)
+        streams = info.get("streams", [])
+        video_streams = [stream for stream in streams if stream.get("codec_type") == "video"]
+        audio_streams = [stream for stream in streams if stream.get("codec_type") == "audio"]
+        valid_duration = duracao > 0
+        if duracao_maxima is not None:
+            valid_duration = abs(duracao - float(duracao_maxima)) <= 0.25
+        valid_video = (
+            len(video_streams) == 1
+            and video_streams[0].get("codec_name") == "h264"
+            and video_streams[0].get("width") == largura
+            and video_streams[0].get("height") == altura
+        )
+        valid_audio = bool(audio_streams) and audio_streams[0].get("codec_name") == "aac"
+        if not valid_video or not valid_audio or not valid_duration or tamanho <= 0:
+            log(
+                f"✗ Vídeo final inválido: video={valid_video}, audio={valid_audio}, "
+                f"duration={duracao:.3f}s, size={tamanho:.3f}MB"
+            )
+            _cleanup(temp_files)
+            return None
         log(f"✓ VÍDEO FINAL: {final_path}")
         log(f"  Duração: {duracao:.1f}s | Tamanho: {tamanho:.1f} MB")
-    except Exception:
-        log(f"✓ VÍDEO FINAL: {final_path}")
+    except (
+        json.JSONDecodeError,
+        KeyError,
+        OSError,
+        subprocess.SubprocessError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        log(f"✗ Não foi possível validar o vídeo final: {exc}")
+        _cleanup(temp_files)
+        return None
 
     # 5. Limpar temporários
     _cleanup(temp_files)

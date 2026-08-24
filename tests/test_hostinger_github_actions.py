@@ -26,25 +26,23 @@ def main() -> int:
     expected_fragments = [
         "workflow_dispatch:",
         "push:",
-        "uses: hostinger/deploy-action@v1",
-        "docker-compose-path: docker-compose.hostinger.yml",
-        "project-name: jose-wipes-studio",
+        "timeout 20m python -m pytest",
+        "curl --fail-with-body",
         "HOSTINGER_API_KEY",
         "HOSTINGER_VM_ID",
-        "TRAEFIK_BASIC_AUTH_USERS",
-        "if: steps.preflight.outputs.configured == 'true'",
+        "if: steps.check_secrets.outputs.configured == 'true'",
     ]
     missing = [fragment for fragment in expected_fragments if fragment not in content]
     if missing:
         print(f"  x Workflow perdeu blocos obrigatorios: {missing}")
         return 1
 
-    if "Hostinger deployment skipped because HOSTINGER_API_KEY or HOSTINGER_VM_ID is missing." not in content:
+    if "Skipping deploy — HOSTINGER_API_KEY or HOSTINGER_VM_ID not configured." not in content:
         print("  x Workflow deveria pular sem falhar quando a configuracao nao existir")
         return 1
 
     print("  + Workflow suporta deploy manual e automatico")
-    print("  + Deploy usa docker-compose.hostinger.yml e preflight seguro")
+    print("  + Falhas de teste e deploy encerram o workflow")
     print("-" * 50)
     print("  + TESTE HOSTINGER GITHUB ACTIONS: PASSOU")
     return 0

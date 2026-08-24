@@ -40,9 +40,7 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest tests/ -v --tb=short --timeout=60 \
-            -k "not (higgsfield or elevenlabs or gdrive or openai_model)" \
-            || echo "Some integration tests skipped (no API keys)"
+          timeout 20m python -m pytest tests/ -v --tb=short -m "not e2e"
 
   deploy:
     name: Deploy to Hostinger VPS
@@ -75,11 +73,10 @@ jobs:
         run: |
           echo "Triggering deploy for VM $HOSTINGER_VM_ID..."
           # Hostinger VPS API — triggers a Docker Compose redeploy
-          curl -sS -X POST \
+          curl --fail-with-body -sS -X POST \
             -H "Authorization: Bearer $HOSTINGER_API_KEY" \
             -H "Content-Type: application/json" \
-            "https://api.hostinger.com/v1/virtual-machines/$HOSTINGER_VM_ID/deploy" \
-            || echo "::warning::Hostinger API call failed. Check HOSTINGER_API_KEY and HOSTINGER_VM_ID."
+            "https://api.hostinger.com/v1/virtual-machines/$HOSTINGER_VM_ID/deploy"
 
   health_check:
     name: Post-Deploy Health Check

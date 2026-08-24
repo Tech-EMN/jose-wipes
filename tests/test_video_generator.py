@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import pytest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from scripts.gerador_midia import gerar_video_higgsfield
 from scripts.integration_errors import IntegrationFailure
 from webapp.video_generator import (
     VideoGenerator,
@@ -75,6 +79,62 @@ class TestHiggsfieldVideoGenerator:
         importlib.reload(cfg)
         gen = HiggsfieldVideoGenerator("test-app")
         assert gen.health_check() is False
+
+    def test_polling_network_error_reuses_submitted_request(self, tmp_path):
+        class Completed:
+            pass
+
+        class Failed:
+            pass
+
+        class NSFW:
+            pass
+
+        class Cancelled:
+            pass
+
+        class InProgress:
+            pass
+
+        controller = SimpleNamespace(request_id="request-1")
+        client = SimpleNamespace(
+            Completed=Completed,
+            Failed=Failed,
+            NSFW=NSFW,
+            Cancelled=Cancelled,
+            submit=MagicMock(return_value=controller),
+            status=MagicMock(
+                side_effect=[
+                    OSError("network is unreachable"),
+                    InProgress(),
+                    Completed(),
+                ]
+            ),
+            result=MagicMock(
+                return_value={"video": {"url": "https://example.com/video.mp4"}}
+            ),
+        )
+        output_path = tmp_path / "video.mp4"
+
+        def download(command, **_kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(b"video")
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.dict(sys.modules, {"higgsfield_client": client}), patch(
+            "scripts.gerador_midia._subprocess_run", side_effect=download
+        ), patch("scripts.gerador_midia.time.sleep"):
+            result = gerar_video_higgsfield(
+                "kling-video/v2.1/master/text-to-video",
+                "A vertical commercial",
+                output_path=output_path,
+                max_retries=2,
+                raise_on_failure=True,
+            )
+
+        assert result == output_path
+        client.submit.assert_called_once()
+        assert client.status.call_count == 3
+        client.result.assert_called_once_with("request-1")
 
 
 class TestOpenAISoraVideoGenerator:

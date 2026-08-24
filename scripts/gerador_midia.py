@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from datetime import datetime
 
@@ -19,6 +20,13 @@ import os
 
 _NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 _DEFAULT_FFMPEG_TIMEOUT = int(os.getenv("JW_FFMPEG_TIMEOUT", "300"))
+_HIGGSFIELD_POLL_INTERVAL_SECONDS = int(
+    os.getenv("JW_HIGGSFIELD_POLL_INTERVAL_SECONDS", "5")
+)
+_HIGGSFIELD_POLL_TIMEOUT_SECONDS = int(
+    os.getenv("JW_HIGGSFIELD_POLL_TIMEOUT_SECONDS", "360")
+)
+_HIGGSFIELD_READ_RETRIES = int(os.getenv("JW_HIGGSFIELD_READ_RETRIES", "5"))
 
 
 def _subprocess_run(cmd, **kwargs):
@@ -37,6 +45,79 @@ def log(msg):
     log_file = LOGS_DIR / f"geracao_{datetime.now().strftime('%Y%m%d')}.log"
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(linha + "\n")
+
+
+def _read_higgsfield_request(
+    operation: Callable[[], object],
+    *,
+    request_id: str,
+    operation_name: str,
+) -> object:
+    for attempt in range(1, _HIGGSFIELD_READ_RETRIES + 1):
+        try:
+            return operation()
+        except Exception as exc:
+            failure = classify_higgsfield_exception(exc, stage="generating")
+            if failure.code != "network_error" or attempt >= _HIGGSFIELD_READ_RETRIES:
+                raise IntegrationFailure(
+                    service="higgsfield",
+                    stage="generating",
+                    code=failure.code,
+                    user_message=failure.user_message,
+                    technical_message=(
+                        f"{operation_name} falhou para request_id={request_id}: "
+                        f"{failure.technical_message}"
+                    ),
+                    retryable=failure.retryable,
+                    auth_confirmed=True,
+                    submit_confirmed=True,
+                    render_confirmed=None,
+                    reason=failure.reason,
+                ) from exc
+            delay = min(2 ** attempt, 10)
+            log(
+                f"Falha de rede no {operation_name} do request {request_id}; "
+                f"nova consulta em {delay}s"
+            )
+            time.sleep(delay)
+
+    raise RuntimeError(f"Falha inesperada ao consultar request {request_id}.")
+
+
+def _poll_higgsfield_request(
+    client: object,
+    *,
+    request_id: str,
+    terminal_types: tuple[type, ...],
+) -> object:
+    deadline = time.monotonic() + _HIGGSFIELD_POLL_TIMEOUT_SECONDS
+
+    while time.monotonic() < deadline:
+        status = _read_higgsfield_request(
+            lambda: client.status(request_id),
+            request_id=request_id,
+            operation_name="polling",
+        )
+        log(f"Status: {type(status).__name__}")
+        if isinstance(status, terminal_types):
+            return status
+        time.sleep(_HIGGSFIELD_POLL_INTERVAL_SECONDS)
+
+    raise IntegrationFailure(
+        service="higgsfield",
+        stage="generating",
+        code="poll_timeout",
+        user_message="A geração excedeu o tempo máximo de espera no Higgsfield.",
+        technical_message=(
+            f"Polling excedeu {_HIGGSFIELD_POLL_TIMEOUT_SECONDS}s para "
+            f"request_id={request_id}."
+        ),
+        retryable=True,
+        auth_confirmed=True,
+        submit_confirmed=True,
+        render_confirmed=None,
+        reason="poll_timeout",
+    )
 
 
 def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
@@ -63,7 +144,7 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
         log(f"Higgsfield submit: modelo={modelo}, dur={duracao}s")
 
         try:
-            from higgsfield_client import Completed, Failed, NSFW
+            from higgsfield_client import Cancelled, Completed, Failed, NSFW
 
             is_image_model = "seedream" in modelo or "text-to-image" in modelo or "soul" in modelo or "reve" in modelo
             is_i2v_model = "image-to-video" in modelo or "dop/" in modelo
@@ -99,41 +180,44 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
 
             log(f"Request ID: {controller.request_id}")
 
-            for status in controller.poll_request_status(delay=5):
-                status_name = type(status).__name__
-                log(f"Status: {status_name}")
+            status = _poll_higgsfield_request(
+                higgsfield_client,
+                request_id=controller.request_id,
+                terminal_types=(Completed, Failed, NSFW, Cancelled),
+            )
 
-                if isinstance(status, Completed):
-                    break
-                elif isinstance(status, NSFW):
-                    log("NSFW detectado, retentando com prompt limpo...")
-                    last_failure = IntegrationFailure(
-                        service="higgsfield",
-                        stage="generating",
-                        code="generation_failed",
-                        user_message="A Higgsfield bloqueou a geração do vídeo por segurança do conteúdo.",
-                        technical_message="NSFW detectado durante o polling.",
-                        retryable=True,
-                        auth_confirmed=True,
-                        submit_confirmed=True,
-                        render_confirmed=False,
-                        reason="nsfw",
-                    )
-                    break
-                elif isinstance(status, Failed):
-                    log("Geração falhou")
-                    error_msg = getattr(status, "message", None) or str(status)
-                    last_failure = classify_higgsfield_exception(
-                        RuntimeError(error_msg),
-                        stage="generating",
-                    )
-                    break
+            if isinstance(status, NSFW):
+                log("NSFW detectado, retentando com prompt limpo...")
+                last_failure = IntegrationFailure(
+                    service="higgsfield",
+                    stage="generating",
+                    code="generation_failed",
+                    user_message="A Higgsfield bloqueou a geração do vídeo por segurança do conteúdo.",
+                    technical_message="NSFW detectado durante o polling.",
+                    retryable=True,
+                    auth_confirmed=True,
+                    submit_confirmed=True,
+                    render_confirmed=False,
+                    reason="nsfw",
+                )
+                continue
 
-            if not isinstance(status, Completed):
-                continue  # próxima tentativa
+            if isinstance(status, (Failed, Cancelled)):
+                log("Geração falhou")
+                error_msg = getattr(status, "message", None) or str(status)
+                last_failure = classify_higgsfield_exception(
+                    RuntimeError(error_msg),
+                    stage="generating",
+                )
+                if last_failure.retryable:
+                    continue
+                break
 
-            # Buscar resultado
-            result = controller.get()
+            result = _read_higgsfield_request(
+                lambda: higgsfield_client.result(controller.request_id),
+                request_id=controller.request_id,
+                operation_name="resultado",
+            )
 
             # Extrair URL do resultado
             url = None
@@ -161,27 +245,39 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
                     RuntimeError("missing output url"),
                     stage="generating",
                 )
-                continue
+                break
 
-            # Baixar
-            result = _subprocess_run(
-                ["curl", "-sL", "-o", str(output_path), url],
-                capture_output=True, timeout=120
-            )
-            if result.returncode != 0 or not output_path.exists() or output_path.stat().st_size == 0:
-                last_failure = classify_higgsfield_exception(
-                    RuntimeError(f"download failed for output url: {url}"),
-                    stage="generating",
+            for download_attempt in range(1, 4):
+                result = _subprocess_run(
+                    ["curl", "-sL", "-o", str(output_path), url],
+                    capture_output=True, timeout=120
                 )
-                log("✗ Download do output Higgsfield falhou")
-                continue
-            size = output_path.stat().st_size / (1024 * 1024)
-            log(f"✓ Salvo: {output_path} ({size:.1f} MB)")
-            return output_path
+                if (
+                    result.returncode == 0
+                    and output_path.exists()
+                    and output_path.stat().st_size > 0
+                ):
+                    size = output_path.stat().st_size / (1024 * 1024)
+                    log(f"✓ Salvo: {output_path} ({size:.1f} MB)")
+                    return output_path
+                if download_attempt < 3:
+                    time.sleep(2 ** download_attempt)
 
+            last_failure = classify_higgsfield_exception(
+                RuntimeError(f"download failed for output url: {url}"),
+                stage="generating",
+            )
+            log("✗ Download do output Higgsfield falhou")
+            break
+
+        except IntegrationFailure as failure:
+            last_failure = failure
+            log(f"Erro [{last_failure.code}]: {last_failure.technical_message}")
+            break
         except Exception as e:
             last_failure = classify_higgsfield_exception(e, stage="generating")
             log(f"Erro [{last_failure.code}]: {last_failure.technical_message}")
+            break
 
     log(f"✗ Falha após {max_retries + 1} tentativas")
     if raise_on_failure and last_failure is not None:

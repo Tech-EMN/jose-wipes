@@ -239,6 +239,10 @@ def executar_pipeline(briefing=None, plano=None):
             resultado["cenas_falharam"].append(titulo_cena)
             continue
 
+    if resultado["cenas_falharam"]:
+        print("\n  ✗ O pipeline exige todas as cenas; composição cancelada.")
+        return resultado
+
     # ========== ETAPA 3: Card Final ==========
     if card_final:
         print(f"\n{'─' * 60}")
@@ -260,10 +264,12 @@ def executar_pipeline(briefing=None, plano=None):
                     persona = cf_audio.get("persona_voz", "narrador")
                     texto = cf_audio.get("texto_fala", "José Wipes. A recuperação que você merece.")
                     audio = gerar_audio_elevenlabs(persona, texto, f"{cf_base}_audio.mp3")
-                    if audio:
-                        combined = combinar_video_audio(video, audio, f"{cf_base}_combined.mp4")
-                        if combined:
-                            video = combined
+                    if not audio:
+                        raise RuntimeError("Falha ao gerar áudio do card final")
+                    combined = combinar_video_audio(video, audio, f"{cf_base}_combined.mp4")
+                    if not combined:
+                        raise RuntimeError("Falha ao combinar áudio do card final")
+                    video = combined
 
                 # Texto overlay
                 cf_texto = card_final.get("texto_overlay", {})
@@ -277,16 +283,22 @@ def executar_pipeline(briefing=None, plano=None):
                     text_result = adicionar_texto_overlay(
                         video, texto_completo, f"{cf_base}_text.mp4", "centro_inferior"
                     )
-                    if text_result:
-                        video = text_result
+                    if not text_result:
+                        raise RuntimeError("Falha ao aplicar texto do card final")
+                    video = text_result
 
                 cenas_prontas.append(str(video))
                 print(f"  ✓ Card final pronto!")
             else:
-                print(f"  ✗ Card final falhou")
+                raise RuntimeError("Falha ao gerar card final")
 
         except Exception as e:
             print(f"  ✗ Card final falhou: {e}")
+            resultado["cenas_falharam"].append("Card final")
+
+    if resultado["cenas_falharam"]:
+        print("\n  ✗ O pipeline exige o card final; composição cancelada.")
+        return resultado
 
     # ========== ETAPA 4: Composição Final ==========
     if not cenas_prontas:
@@ -302,7 +314,6 @@ def executar_pipeline(briefing=None, plano=None):
 
     if video_final:
         resultado["video_local"] = str(video_final)
-        resultado["sucesso"] = True
 
         # ========== ETAPA 5: Upload ==========
         print(f"\n{'─' * 60}")
@@ -312,6 +323,9 @@ def executar_pipeline(briefing=None, plano=None):
         drive_result = upload_para_drive(video_final)
         if drive_result:
             resultado["video_drive"] = drive_result
+            resultado["sucesso"] = True
+        else:
+            print("  ✗ Upload obrigatório para o Google Drive falhou")
 
     # ========== RESUMO ==========
     print(f"\n{'=' * 60}")

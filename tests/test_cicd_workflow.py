@@ -70,6 +70,16 @@ class TestCICDWorkflow:
         content = workflow_path.read_text()
         assert "ffmpeg" in content.lower()
 
+    def test_test_failures_are_not_masked(self, workflow_path):
+        content = workflow_path.read_text()
+        assert '-m "not e2e"' in content
+        assert "|| echo \"Some integration tests skipped" not in content
+
+    def test_deploy_api_failure_is_not_masked(self, workflow_path):
+        content = workflow_path.read_text()
+        assert "curl --fail-with-body" in content
+        assert "Hostinger API call failed" not in content
+
     def test_env_hostinger_example_exists(self):
         """.env.hostinger.example should exist for deploy reference."""
         env_path = Path(__file__).parent.parent / ".env.hostinger.example"
@@ -113,3 +123,13 @@ class TestCICDWorkflow:
         assert "${GOOGLE_DRIVE_FOLDER_ID:?GOOGLE_DRIVE_FOLDER_ID must be set}" in worker_section
         assert "${GOOGLE_SERVICE_ACCOUNT_HOST_PATH:?GOOGLE_SERVICE_ACCOUNT_HOST_PATH must be set}" in worker_section
         assert "GOOGLE_SERVICE_ACCOUNT_FILE=/app/credentials/service-account.json" in env_example
+
+    def test_production_runtime_guards_are_forwarded(self):
+        root = Path(__file__).parent.parent
+        compose = (root / "docker-compose.hostinger.yml").read_text(encoding="utf-8")
+        web_section, worker_section = compose.split("  jose-wipes-worker:", 1)
+
+        assert "JW_API_KEY: ${JW_API_KEY:-}" in web_section
+        assert "JW_AUTH_STRICT: ${JW_AUTH_STRICT:-false}" in web_section
+        assert "JW_FFMPEG_TIMEOUT: ${JW_FFMPEG_TIMEOUT:-300}" in worker_section
+        assert "JW_HIGGSFIELD_POLL_TIMEOUT_SECONDS:" in worker_section

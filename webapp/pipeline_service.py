@@ -30,6 +30,26 @@ from webapp.schemas import CreateJobRequest, PlannerOutput
 ProgressCallback = Callable[[str, str], None]
 
 
+def _required_step_failure(
+    *,
+    service: str,
+    stage: str,
+    code: str,
+    message: str,
+    render_confirmed: bool | None = None,
+) -> IntegrationFailure:
+    return IntegrationFailure(
+        service=service,
+        stage=stage,
+        code=code,
+        user_message=message,
+        technical_message=message,
+        retryable=True,
+        render_confirmed=render_confirmed,
+        reason=code,
+    )
+
+
 def _gerar_video_com_fallback(
     model_config: VideoModelConfig,
     prompt: str,
@@ -273,9 +293,19 @@ def render_planned_video(
                 )
                 if combined_path:
                     current_video_path = Path(combined_path)
+                else:
+                    raise _required_step_failure(
+                        service="ffmpeg",
+                        stage="composing_audio",
+                        code="audio_composition_failed",
+                        message=f"Falha ao combinar a narração da cena {shot.shot_number}.",
+                    )
             else:
-                warnings.append(
-                    f"Não foi possível gerar a narração da cena {shot.shot_number}; a cena segue sem áudio."
+                raise _required_step_failure(
+                    service="elevenlabs",
+                    stage="generating_audio",
+                    code="narration_failed",
+                    message=f"Falha ao gerar a narração da cena {shot.shot_number}.",
                 )
 
         if shot.product_overlay.ativo:
@@ -290,8 +320,11 @@ def render_planned_video(
             if overlay_path:
                 current_video_path = Path(overlay_path)
             else:
-                warnings.append(
-                    f"O overlay do produto falhou na cena {shot.shot_number}; a cena segue sem embalagem real."
+                raise _required_step_failure(
+                    service="ffmpeg",
+                    stage="composing",
+                    code="product_overlay_failed",
+                    message=f"Falha ao aplicar a embalagem na cena {shot.shot_number}.",
                 )
 
         if shot.overlay_text:
@@ -304,8 +337,11 @@ def render_planned_video(
             if text_path:
                 current_video_path = Path(text_path)
             else:
-                warnings.append(
-                    f"O texto de tela falhou na cena {shot.shot_number}; a cena segue sem overlay textual."
+                raise _required_step_failure(
+                    service="ffmpeg",
+                    stage="composing",
+                    code="text_overlay_failed",
+                    message=f"Falha ao aplicar o texto da cena {shot.shot_number}.",
                 )
 
         rendered_scenes.append(str(current_video_path))
@@ -335,7 +371,12 @@ def render_planned_video(
         if card_video:
             rendered_scenes.append(str(card_video))
         else:
-            warnings.append("Não foi possível gerar o card final com a logo enviada.")
+            raise _required_step_failure(
+                service="ffmpeg",
+                stage="composing",
+                code="brand_card_failed",
+                message="Falha ao gerar o card final da marca.",
+            )
 
     if progress_cb:
         progress_cb("composing", "Compondo vídeo final e aplicando marca da empresa...")
@@ -350,14 +391,23 @@ def render_planned_video(
         duracao_maxima=request.duration_seconds,
     )
     if not final_video:
-        raise RuntimeError("Falha na composição do vídeo final.")
+        raise _required_step_failure(
+            service="ffmpeg",
+            stage="composing",
+            code="final_video_invalid",
+            message="Falha na composição ou validação do vídeo final.",
+        )
 
     if progress_cb:
         progress_cb("uploading_drive", "Enviando vídeo final para o Google Drive...")
     drive_result = upload_para_drive(final_video)
     if not drive_result:
-        warnings.append(
-            "O vídeo foi concluído localmente, mas o upload para o Google Drive falhou."
+        raise _required_step_failure(
+            service="google_drive",
+            stage="uploading_drive",
+            code="drive_upload_failed",
+            message="Falha ao entregar o vídeo final no Google Drive.",
+            render_confirmed=True,
         )
 
     manifest_path = job_dir / "manifesto_render.json"

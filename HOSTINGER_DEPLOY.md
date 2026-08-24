@@ -65,6 +65,11 @@ Cadastre no projeto do app os valores de `.env.hostinger.example`:
 - `OPENAI_API_KEY`
 - `OPENAI_PLANNER_MODEL=gpt-4.1-mini`
 - `ELEVENLABS_API_KEY`
+- `JW_API_KEY` apenas para clientes que enviem `X-API-Key`
+- `JW_AUTH_STRICT=false` para a interface protegida pelo BasicAuth do Traefik
+- `JW_HIGGSFIELD_POLL_INTERVAL_SECONDS=5`
+- `JW_HIGGSFIELD_POLL_TIMEOUT_SECONDS=360`
+- `JW_HIGGSFIELD_READ_RETRIES=5`
 - `TZ`
 - `PYTHONUNBUFFERED`
 
@@ -150,7 +155,9 @@ Valide estes pontos apos o deploy:
 3. `GET /api/health/external` retorna `ready_for_submit=true` quando as chaves e a conectividade estao corretas.
 4. Um job simples de 10 segundos chega em `completed`.
 5. O `download_url` baixa o MP4 final.
-6. Reiniciar o container nao apaga jobs antigos nem logs.
+6. O MP4 vertical em 1080p possui `1080x1920`, H.264 e áudio AAC no `ffprobe`.
+7. O mesmo job possui `drive_url` válido.
+8. Reiniciar o container nao apaga jobs antigos nem logs.
 
 ## 6. Persistencia e operacao
 
