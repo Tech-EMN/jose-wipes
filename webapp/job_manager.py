@@ -7,7 +7,7 @@ import queue
 import threading
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -126,6 +126,7 @@ class JobManager:
             "enhanced_brief": None,
             "preview_url": None,
             "download_url": None,
+            "drive_url": None,
             "error_message": None,
             "failed_stage": None,
             "failed_service": None,
@@ -136,8 +137,8 @@ class JobManager:
             "submit_confirmed": None,
             "render_confirmed": None,
             "failure_reason": None,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "planner_prompt_hash": _prompt_content_hash(),
             "request": request.model_dump(),
             "script_pdf_path": str(pdf_path) if pdf_path else None,
@@ -166,6 +167,7 @@ class JobManager:
                 "enhanced_brief": metadata.get("enhanced_brief"),
                 "preview_url": metadata.get("preview_url"),
                 "download_url": metadata.get("download_url"),
+                "drive_url": metadata.get("drive_url"),
                 "error_message": metadata.get("error_message"),
                 "failed_stage": metadata.get("failed_stage"),
                 "failed_service": metadata.get("failed_service"),
@@ -303,6 +305,8 @@ class JobManager:
                 progress_message="Vídeo final pronto para preview e download.",
                 warnings=warnings,
                 final_video_path=render_result["final_video_path"],
+                drive_file_id=render_result.get("drive_file_id"),
+                drive_url=render_result.get("drive_url"),
                 preview_url=f"/api/jobs/{job_id}/download",
                 download_url=f"/api/jobs/{job_id}/download",
                 error_message=None,
@@ -352,7 +356,7 @@ class JobManager:
         return json.loads(self._metadata_path(job_dir).read_text(encoding="utf-8"))
 
     def _write_metadata(self, job_dir: Path, metadata: dict[str, object]) -> None:
-        metadata["updated_at"] = datetime.utcnow().isoformat()
+        metadata["updated_at"] = datetime.now(timezone.utc).isoformat()
         target = self._metadata_path(job_dir)
         temp_path = target.with_suffix(".tmp")
         with self._lock:

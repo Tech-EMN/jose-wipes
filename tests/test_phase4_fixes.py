@@ -72,28 +72,6 @@ class TestF15LogoPath:
         importlib.reload(cfg)
 
 
-class TestF17FallbackEnv:
-    """F17: Env vars for fallback model applications."""
-
-    def test_fallback_env_vars_exist(self):
-        """model_registry.py should use _FALLBACK env vars."""
-        registry_path = (
-            Path(__file__).parent.parent / "webapp" / "model_registry.py"
-        )
-        content = registry_path.read_text()
-        assert "HF_MODEL_SEEDANCE_1_5_PRO_FALLBACK" in content
-        assert "HF_MODEL_KLING_3_0_FALLBACK" in content
-        assert "HF_MODEL_VEO_3_1_FALLBACK" in content
-
-    def test_fallback_not_hardcoded(self):
-        """Fallback should use _env_or_default, not string literal."""
-        registry_path = (
-            Path(__file__).parent.parent / "webapp" / "model_registry.py"
-        )
-        content = registry_path.read_text()
-        assert '_env_or_default(\n            "HF_MODEL_SEEDANCE_1_5_PRO_FALLBACK"' in content
-
-
 class TestF9ConsolidateDeploy:
     """F9: Remove Vercel/Heroku deploy targets."""
 

@@ -22,6 +22,40 @@ from typing import Optional, Protocol
 _log = logging.getLogger(__name__)
 
 
+def _prepare_sora_reference(
+    source_path: Path,
+    output_path: Path,
+    size: str,
+) -> Path:
+    from scripts.compositor import _subprocess_run
+
+    width, height = size.split("x", 1)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    result = _subprocess_run(
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            str(source_path),
+            "-vf",
+            (
+                f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=white"
+            ),
+            "-frames:v",
+            "1",
+            str(output_path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 or not output_path.exists():
+        raise RuntimeError(result.stderr.strip() or "FFmpeg failed to prepare Sora reference.")
+    return output_path
+
+
 @dataclass(frozen=True)
 class VideoGenerationRequest:
     """Input parameters for a video generation call."""
@@ -32,6 +66,7 @@ class VideoGenerationRequest:
     duration_seconds: int
     output_path: Path
     reference_image_url: str | None = None
+    reference_image_path: Path | None = None
     seed: int | None = None
 
 
@@ -85,12 +120,12 @@ class OpenAISoraVideoGenerator(VideoGenerator):
     """OpenAI Sora implementation of the VideoGenerator interface."""
 
     # sora-2 só suporta 720x1280 / 1280x720
-    # sora-2-pro suporta todas: 720x1280, 1280x720, 1024x1792, 1792x1024
+    # sora-2-pro suporta todas: 720x1280, 1280x720, 1080x1920, 1920x1080
     SORA_SIZES_PRO: dict[tuple[str, str], str] = {
         ("9:16", "720p"): "720x1280",
-        ("9:16", "1080p"): "1024x1792",
+        ("9:16", "1080p"): "1080x1920",
         ("16:9", "720p"): "1280x720",
-        ("16:9", "1080p"): "1792x1024",
+        ("16:9", "1080p"): "1920x1080",
     }
     SORA_SIZES_BASE: dict[tuple[str, str], str] = {
         ("9:16", "720p"): "720x1280",
@@ -149,7 +184,7 @@ class OpenAISoraVideoGenerator(VideoGenerator):
             )
 
         dur = request.duration_seconds
-        nearest = min(self.SORA_DURATIONS, key=lambda x: abs(x - dur))
+        nearest = min(self.SORA_DURATIONS, key=lambda x: (abs(x - dur), x))
         seconds = str(nearest)
 
         if nearest != dur:
@@ -167,22 +202,39 @@ class OpenAISoraVideoGenerator(VideoGenerator):
             "poll_interval_ms": 5000,
         }
 
-        if request.reference_image_url:
-            from openai.types.image_input_reference_param import (
-                ImageInputReferenceParam,
+        if request.reference_image_path:
+            reference_path = request.output_path.with_name(
+                f"{request.output_path.stem}_sora_reference.png"
             )
-
-            params["input_reference"] = ImageInputReferenceParam(
-                image_url=request.reference_image_url,
-            )
+            try:
+                params["input_reference"] = _prepare_sora_reference(
+                    request.reference_image_path,
+                    reference_path,
+                    size,
+                )
+            except Exception as exc:
+                raise IntegrationFailure(
+                    service="openai",
+                    stage="generation",
+                    code="sora_reference_error",
+                    user_message="Falha ao preparar a imagem de referência para a Sora.",
+                    technical_message=str(exc),
+                    retryable=False,
+                ) from exc
 
         params.update(self._extra_arguments)
 
         try:
             video = client.videos.create_and_poll(**params)  # type: ignore[arg-type]
         except Exception as exc:
+            from scripts.openai_utils import classify_openai_exception
+
             error_msg = str(exc)
             error_lower = error_msg.lower()
+            classified = classify_openai_exception(exc, stage="generation")
+
+            if classified.code == "insufficient_quota":
+                raise classified from exc
 
             # Auth / permission errors are NOT retryable
             if "insufficient permissions" in error_lower or "401" in error_msg:
@@ -218,8 +270,39 @@ class OpenAISoraVideoGenerator(VideoGenerator):
                 retryable=True,
             ) from exc
 
+        if getattr(video, "status", None) == "failed":
+            error = getattr(video, "error", None)
+            error_code = (
+                error.get("code")
+                if isinstance(error, dict)
+                else getattr(error, "code", None)
+            ) or "generation_failed"
+            error_message = (
+                error.get("message")
+                if isinstance(error, dict)
+                else getattr(error, "message", None)
+            ) or "Video generation failed."
+            moderation_blocked = error_code == "moderation_blocked"
+            raise IntegrationFailure(
+                service="openai",
+                stage="generation",
+                code=f"sora_{error_code}",
+                user_message=(
+                    "A Sora bloqueou o prompt pela moderação. Ajuste o briefing e tente novamente."
+                    if moderation_blocked
+                    else "A Sora não conseguiu concluir a geração do vídeo."
+                ),
+                technical_message=f"{error_code}: {error_message}",
+                retryable=not moderation_blocked,
+                submit_confirmed=True,
+                render_confirmed=False,
+                reason=str(error_code),
+            )
+
         try:
             content = client.videos.download_content(video.id)
+            request.output_path.parent.mkdir(parents=True, exist_ok=True)
+            content.write_to_file(request.output_path)
         except Exception as exc:
             raise IntegrationFailure(
                 service="openai",
@@ -230,14 +313,11 @@ class OpenAISoraVideoGenerator(VideoGenerator):
                 retryable=True,
             ) from exc
 
-        request.output_path.parent.mkdir(parents=True, exist_ok=True)
-        request.output_path.write_bytes(content)
-
         _log.info(
             "Sora: vídeo %s salvo em %s (%.1f MB)",
             video.id,
             request.output_path,
-            len(content) / (1024 * 1024),
+            request.output_path.stat().st_size / (1024 * 1024),
         )
 
         return VideoGenerationResult(

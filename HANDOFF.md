@@ -46,7 +46,7 @@ main (original)
 | Gap | O quê | Arquivos novos |
 |-----|-------|---------------|
 | F14 | Containers separados (web + worker, shared volume) | `webapp/worker.py`, docker-compose refeitos |
-| F8 | CI/CD Workflow (GitHub Actions → Hostinger) | `.github/workflows/hostinger-deploy.yml`, `.env.hostinger.example` |
+| F8 | CI/CD Workflow (GitHub Actions → EasyPanel) | `.github/workflows/easypanel-deploy.yml`, `EASYPANEL_DEPLOY.md` |
 | F2 | SQLite (ADIADO — refatoração maior, 6h) | — |
 
 ### Fase 3 — Qualidade (5 gaps)
@@ -126,7 +126,8 @@ webapp/video_generator.py       — F4
 scripts/logging_config.py       — F13
 config/planner_system_prompt.txt — F11
 .env.hostinger.example           — F8
-.github/workflows/hostinger-deploy.yml — F8
+.github/workflows/easypanel-deploy.yml — F8
+EASYPANEL_DEPLOY.md              — F8
 tests/test_e2e.py               — F18 ✨
 tests/conftest.py               — F18 ✨
 tests/fixtures/e2e_plan.json    — F18 ✨
@@ -140,34 +141,27 @@ Procfile        — F9
 api/index.py    — F9
 ```
 
-## Testes (139 unitários + 6 E2E = 145 total)
+## Testes
+
+Execute a suíte segura com:
+
+```bash
+python -m pytest tests/ -m "not e2e"
 ```
-tests/test_auth.py              — 24 tests
-tests/test_rate_limit.py        — 11 tests
-tests/test_moderation.py        — 19 tests
-tests/test_ffmpeg_timeout.py    —  9 tests
-tests/test_container_separation.py — 11 tests
-tests/test_cicd_workflow.py     — 12 tests
-tests/test_external_prompt.py   —  9 tests
-tests/test_upload_retry.py      —  7 tests
-tests/test_sse_streaming.py     —  6 tests
-tests/test_video_generator.py   —  9 tests
-tests/test_logging_config.py    — 12 tests
-tests/test_phase4_fixes.py      — 10 tests
-tests/test_e2e.py               —  6 tests ✨ (F18)
-```
+
+Os testes E2E permanecem separados porque dependem de provedores externos, créditos e configuração de produção.
 
 ---
 
 ## Próximos passos (para a próxima sessão)
 
-1. **Verificar Higgsfield**: API estava offline (521). Quando voltar, rodar:
+1. **Repor créditos Higgsfield** e executar a amostra de 10 jobs:
    ```bash
    pytest tests/test_e2e.py -v -k "slow"
    ```
 
-2. **Merge das branches**: `fix/phase4-quick-fixes` é o merge mais simples (contém todas alterações). `fix/f18-e2e-tests` depende dela.
+2. **Merge da PR** e confirmação do workflow GitHub Actions → EasyPanel.
 
-3. **F2 — SQLite Migration**: Último gap restante (~6h de refatoração)
+3. **Smoke test de produção**: validar `/api/health/external`, gerar um job e baixar o MP4.
 
-4. **Corrigir OpenAI key**: A chave atual tem restrições de escopo (`model.request` ausente) — necessário para moderação e planner.
+4. **Métricas do desafio**: registrar taxa de sucesso, tempo médio e custo real da amostra.

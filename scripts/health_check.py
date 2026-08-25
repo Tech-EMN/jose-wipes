@@ -18,9 +18,8 @@ from scripts.config import (
     OPENAI_API_KEY,
     OPENAI_PLANNER_MODEL,
     PROJECT_ROOT,
-    obter_path_imagem_produto,
+    JW_DRIVE_REQUIRED,
 )
-from scripts.openai_utils import create_text_response
 
 
 def check_env():
@@ -31,9 +30,12 @@ def check_env():
         "HF_API_SECRET": HF_API_SECRET,
         "OPENAI_API_KEY": OPENAI_API_KEY,
         "ELEVENLABS_API_KEY": ELEVENLABS_API_KEY,
-        "GOOGLE_SERVICE_ACCOUNT_FILE": GOOGLE_SERVICE_ACCOUNT_FILE,
-        "GOOGLE_DRIVE_FOLDER_ID": GOOGLE_DRIVE_FOLDER_ID,
     }
+    if JW_DRIVE_REQUIRED:
+        chaves.update({
+            "GOOGLE_SERVICE_ACCOUNT_FILE": GOOGLE_SERVICE_ACCOUNT_FILE,
+            "GOOGLE_DRIVE_FOLDER_ID": GOOGLE_DRIVE_FOLDER_ID,
+        })
     ok = all(v and not v.startswith("your_") for v in chaves.values())
     faltam = [k for k, v in chaves.items() if not v or v.startswith("your_")]
     return ok, f"Faltam: {', '.join(faltam)}" if faltam else "Todas configuradas"
@@ -85,22 +87,12 @@ def check_configs():
 
 
 def check_higgsfield():
-    """5. API Higgsfield (valida auth basica via upload da referencia oficial)."""
+    """5. Higgsfield credentials without a state-changing provider call."""
 
-    if not HF_API_KEY or HF_API_KEY.startswith("your_"):
-        return False, "API key nao configurada"
-    try:
-        import higgsfield_client
-
-        product_path = obter_path_imagem_produto(strict=True)
-        url = higgsfield_client.upload_file(str(product_path))
-        if url and str(url).startswith("http"):
-            return True, "Upload autenticado da referencia do produto OK (auth basica confirmada)"
-        return False, f"Upload retornou valor inesperado: {url}"
-    except ImportError:
-        return False, "higgsfield_client nao instalado"
-    except Exception as e:
-        return False, f"Erro: {e}"
+    credentials = (HF_API_KEY, HF_API_SECRET)
+    if any(not value or value.startswith("your_") for value in credentials):
+        return False, "Credenciais nao configuradas"
+    return True, "Credenciais configuradas; autenticacao sera confirmada no primeiro envio"
 
 
 def check_elevenlabs():
@@ -128,14 +120,8 @@ def check_openai():
         from openai import OpenAI
 
         client = OpenAI(api_key=OPENAI_API_KEY)
-        text = create_text_response(
-            client=client,
-            model=OPENAI_PLANNER_MODEL,
-            instructions="Responda de forma minima.",
-            user_input="Responda ok",
-            max_output_tokens=200,
-        )
-        return True, f"{OPENAI_PLANNER_MODEL}: {text}"
+        model = client.models.retrieve(OPENAI_PLANNER_MODEL)
+        return True, f"{model.id}: acesso confirmado"
     except Exception as e:
         return False, f"Erro: {e}"
 
@@ -159,7 +145,7 @@ def main():
         ("2. Dependencias Python", check_deps),
         ("3. FFmpeg", check_ffmpeg),
         ("4. Arquivos de config", check_configs),
-        ("5. API Higgsfield (auth basica)", check_higgsfield),
+        ("5. Credenciais Higgsfield", check_higgsfield),
         ("6. API ElevenLabs", check_elevenlabs),
         ("7. API OpenAI", check_openai),
         ("8. Espaco em disco", check_disco),
@@ -183,7 +169,7 @@ def main():
     print(f"\n{'=' * 60}")
     if passou == total:
         print(f"  [+] Integracoes basicas OK ({passou}/{total})")
-        print("      Observacao: Higgsfield aqui valida auth/upload, nao prova render completo.")
+        print("      Observacao: Higgsfield aqui valida configuracao, nao auth ou render completo.")
     elif passou >= total - 2:
         print(f"  [~] Funcional com limitacoes ({passou}/{total})")
         for nome, ok, msg in resultados:

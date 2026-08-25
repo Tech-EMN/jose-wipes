@@ -1,5 +1,7 @@
 # Deploy na Hostinger com Docker Manager + Traefik
 
+> Documento legado para uma implantação alternativa. A produção atual usa EasyPanel conforme `EASYPANEL_DEPLOY.md`; o workflow da Hostinger foi removido para evitar dois caminhos de deploy.
+
 Este projeto pode rodar de forma estavel na Hostinger usando um VPS Linux com o template Docker, Traefik para HTTPS e uma unica replica do app. O arquivo `docker-compose.hostinger.yml` foi criado para esse fluxo e preserva somente `output` e `logs` em volumes persistentes.
 
 ## O que este deploy assume
@@ -15,7 +17,7 @@ Este projeto pode rodar de forma estavel na Hostinger usando um VPS Linux com o 
 - `docker-compose.hostinger.yml`: compose de producao com Traefik, sem expor `8000`
 - `.env.hostinger.example`: checklist das variaveis que precisam ser cadastradas no Docker Manager
 - `scripts/cleanup_retention.py`: limpeza de jobs antigos e logs antigos
-- `.github/workflows/hostinger-deploy.yml`: auto-deploy opcional via GitHub Actions
+- `.github/workflows/easypanel-deploy.yml`: workflow de produção atual, direcionado ao EasyPanel
 
 ## 0. Publicar no GitHub
 
@@ -23,7 +25,7 @@ O fluxo recomendado e:
 
 1. subir o codigo para o GitHub
 2. fazer o primeiro deploy manual pelo Docker Manager com `Compose from URL`
-3. opcionalmente ativar auto-deploy pelo workflow `.github/workflows/hostinger-deploy.yml`
+3. para o ambiente atual, seguir `EASYPANEL_DEPLOY.md`
 
 Exemplo de comandos para um repositorio novo no GitHub:
 
@@ -63,16 +65,27 @@ Cadastre no projeto do app os valores de `.env.hostinger.example`:
 - `HF_API_KEY`
 - `HF_API_SECRET`
 - `OPENAI_API_KEY`
-- `OPENAI_PLANNER_MODEL`
+- `OPENAI_PLANNER_MODEL=gpt-4.1-mini`
 - `ELEVENLABS_API_KEY`
+- `JW_API_KEY` apenas para clientes que enviem `X-API-Key`
+- `JW_AUTH_STRICT=false` para a interface protegida pelo BasicAuth do Traefik
+- `JW_HIGGSFIELD_POLL_INTERVAL_SECONDS=5`
+- `JW_HIGGSFIELD_POLL_TIMEOUT_SECONDS=360`
+- `JW_HIGGSFIELD_READ_RETRIES=5`
 - `TZ`
 - `PYTHONUNBUFFERED`
 
-Se for usar upload automatico para Google Drive, adicione tambem:
+Enquanto a Atria não confirmar a obrigatoriedade do Drive, use `JW_DRIVE_REQUIRED=false`. Nesse modo, o download pelo Studio conclui o job e uma falha no Drive aparece apenas como aviso.
 
-- `GOOGLE_SERVICE_ACCOUNT_FILE=credentials/service-account.json`
-- `GOOGLE_DRIVE_FOLDER_ID`
+Para também entregar no Shared Drive, adicione:
+
+- `GOOGLE_SERVICE_ACCOUNT_FILE=/app/credentials/service-account.json`
+- `GOOGLE_DRIVE_FOLDER_ID` com o ID da pasta de destino no Shared Drive
 - `GOOGLE_SERVICE_ACCOUNT_HOST_PATH=/opt/jose-wipes/credentials/service-account.json`
+
+A Atria deve conceder à service account permissão para criar arquivos nessa pasta. O JSON deve existir no caminho do host antes do deploy e não deve ser enviado ao Git.
+
+Se a Atria confirmar que o Drive é obrigatório, altere `JW_DRIVE_REQUIRED=true`. A partir daí, qualquer falha de upload encerra o job como `failed`.
 
 Para gerar `TRAEFIK_BASIC_AUTH_USERS`, crie um hash `htpasswd` e escape `$` como `$$` antes de colar no Docker Manager.
 
@@ -81,20 +94,14 @@ Para gerar `TRAEFIK_BASIC_AUTH_USERS`, crie um hash `htpasswd` e escape `$` como
 1. Escolha `Compose from URL`.
 2. Aponte para o `raw` de `docker-compose.hostinger.yml` no GitHub.
 3. Salve o projeto e rode o deploy.
-4. Se for usar Google Drive, edite o compose no Docker Manager e descomente a linha do bind mount:
-
-```yaml
-- ${GOOGLE_SERVICE_ACCOUNT_HOST_PATH}:/app/credentials/service-account.json:ro
-```
-
-5. Redeploye o projeto depois de descomentar a linha acima.
+4. Confirme que `GOOGLE_SERVICE_ACCOUNT_HOST_PATH` aponta para o JSON existente no VPS. O compose monta essa credencial somente no worker.
 
 ## 4.1 Repositorio privado
 
 Se o repositorio for privado, use uma destas abordagens:
 
 - criar uma deploy key no VPS e cadastrar no GitHub
-- usar o workflow `.github/workflows/hostinger-deploy.yml` com `HOSTINGER_API_KEY` e `HOSTINGER_VM_ID`
+- configurar o acesso ao repositório diretamente no Docker Manager
 
 Para deploy key no VPS, a Hostinger documenta este comando:
 
@@ -104,38 +111,9 @@ ssh-keygen -t ed25519 -C "my-repository" -N "" -f ~/.ssh/my-repository
 
 Depois copie `~/.ssh/my-repository.pub` e adicione em `GitHub -> Settings -> Deploy Keys`.
 
-## 4.2 Auto-deploy opcional com GitHub Actions
+## 4.2 CI/CD atual
 
-O workflow `.github/workflows/hostinger-deploy.yml` ja esta pronto para:
-
-- rodar manualmente via `workflow_dispatch`
-- rodar automaticamente a cada push na branch `main`
-- pular sem falhar enquanto `HOSTINGER_API_KEY` ou `HOSTINGER_VM_ID` nao estiverem configurados
-- fazer deploy usando `docker-compose.hostinger.yml`
-
-No GitHub, configure:
-
-### Secrets
-
-- `HOSTINGER_API_KEY`
-- `TRAEFIK_BASIC_AUTH_USERS`
-- `HF_API_KEY`
-- `HF_API_SECRET`
-- `OPENAI_API_KEY`
-- `ELEVENLABS_API_KEY`
-
-### Variables
-
-- `HOSTINGER_VM_ID`
-- `TRAEFIK_HOST`
-- `OPENAI_PLANNER_MODEL`
-- `GOOGLE_SERVICE_ACCOUNT_FILE`
-- `GOOGLE_DRIVE_FOLDER_ID`
-- `GOOGLE_SERVICE_ACCOUNT_HOST_PATH`
-- `TZ`
-- `PYTHONUNBUFFERED`
-
-Se quiser manter o repositorio privado e usar GitHub Actions, adicione tambem o token ou a estrategia de acesso exigida pela Hostinger conforme a documentacao oficial.
+O CI/CD oficial deste repositório chama o EasyPanel e está documentado em `EASYPANEL_DEPLOY.md`. Uma implantação futura na Hostinger deve receber um workflow separado e outro nome de secret, sem reutilizar o gatilho de produção.
 
 ## 4.3 Botao "Deploy on Hostinger" opcional
 
@@ -151,10 +129,12 @@ Valide estes pontos apos o deploy:
 
 1. `https://studio.seudominio.com/` responde com `200`.
 2. A UI pede autenticacao basica antes de abrir.
-3. `GET /api/health/external` retorna `ready_for_submit=true` quando as chaves e a conectividade estao corretas.
+3. `GET /api/health/external` retorna `ready_for_submit=true` quando as chaves e a conectividade estao corretas e nao ha falha Higgsfield recente por saldo insuficiente.
 4. Um job simples de 10 segundos chega em `completed`.
 5. O `download_url` baixa o MP4 final.
-6. Reiniciar o container nao apaga jobs antigos nem logs.
+6. O MP4 vertical em 1080p possui `1080x1920`, H.264 e áudio AAC no `ffprobe`.
+7. Quando o Drive estiver configurado, o mesmo job possui `drive_url` válido; quando não estiver, o job continua válido pelo `download_url` se `JW_DRIVE_REQUIRED=false`.
+8. Reiniciar o container nao apaga jobs antigos nem logs.
 
 ## 6. Persistencia e operacao
 

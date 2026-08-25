@@ -553,6 +553,11 @@ button:disabled {
   box-shadow: 0 8px 24px var(--gold-glow);
 }
 
+.download-link:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
 .hidden {
   display: none !important;
 }

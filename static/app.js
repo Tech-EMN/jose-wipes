@@ -13,6 +13,7 @@ const warningsList = document.getElementById("warnings-list");
 const resultContainer = document.getElementById("result-container");
 const previewVideo = document.getElementById("preview-video");
 const downloadLink = document.getElementById("download-link");
+const driveLink = document.getElementById("drive-link");
 const healthBadge = document.getElementById("health-badge");
 const externalSummary = document.getElementById("external-summary");
 const runtimeNote = document.getElementById("runtime-note");
@@ -154,6 +155,8 @@ function resetResult() {
   previewVideo.removeAttribute("src");
   previewVideo.load();
   downloadLink.setAttribute("href", "#");
+  driveLink.setAttribute("href", "#");
+  driveLink.classList.add("hidden");
 }
 
 function setWarnings(warnings) {
@@ -227,30 +230,21 @@ function renderExternalHealth(payload) {
   externalReady = payload.ready_for_submit === true;
   healthBadge.textContent = externalReady ? "ready" : "attention";
   externalSummary.textContent = externalReady
-    ? "OpenAI, Higgsfield e FFmpeg estao prontos para receber um job real."
+    ? "OpenAI, Higgsfield, ElevenLabs e FFmpeg estao prontos para receber um job real."
     : "Existe pelo menos uma integracao indisponivel. Revise os itens abaixo antes de enviar.";
 
-  const runtimeParts = [];
-  runtimeParts.push(
-    payload.startup_mode === "runner"
-      ? "Servidor iniciado pelo runner oficial."
-      : "Para teste real, inicie via python -m scripts.web_server start."
-  );
-  if (payload.external_connectivity_checked) {
-    runtimeParts.push("A conectividade externa desta instancia ja foi verificada.");
-  } else {
-    runtimeParts.push("Esta instancia ainda nao tinha validacao externa registrada.");
-  }
-  runtimeNote.textContent = runtimeParts.join(" ");
+  runtimeNote.textContent = externalReady
+    ? "A conectividade externa desta instancia foi verificada."
+    : "A verificacao externa encontrou servicos que precisam de atencao.";
 
   renderHealthServices(payload.services || {});
 
   if (!externalReady) {
     submitGuard.textContent =
-      "O envio esta bloqueado porque OpenAI, Higgsfield ou FFmpeg nao estao prontos neste momento.";
+      "O envio esta bloqueado porque OpenAI, Higgsfield, ElevenLabs ou FFmpeg nao estao prontos neste momento.";
   } else {
     submitGuard.textContent =
-      "Conectividade externa validada. O envio usara OpenAI para planejar e Higgsfield para gerar.";
+      "Conectividade externa validada. O envio usara OpenAI no planejamento e o provider do tier selecionado na geracao.";
   }
 
   updateSubmitState();
@@ -318,6 +312,10 @@ function renderStatus(data) {
   if (data.status === "completed" && data.preview_url && data.download_url) {
     previewVideo.src = data.preview_url;
     downloadLink.href = data.download_url;
+    if (data.drive_url) {
+      driveLink.href = data.drive_url;
+      driveLink.classList.remove("hidden");
+    }
     resultContainer.classList.remove("hidden");
     if (pollHandle) {
       clearInterval(pollHandle);

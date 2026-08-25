@@ -13,7 +13,11 @@ from scripts.compositor import (
     gerar_card_logo,
     overlay_produto,
 )
-from scripts.config import obter_path_imagem_produto, obter_url_imagem_produto
+from scripts.config import (
+    JW_DRIVE_REQUIRED,
+    obter_path_imagem_produto,
+    obter_url_imagem_produto,
+)
 from scripts.product_reference import prompt_pede_referencia_produto
 from scripts.gerador_midia import (
     combinar_video_audio,
@@ -21,11 +25,34 @@ from scripts.gerador_midia import (
     gerar_video_higgsfield,
 )
 from scripts.integration_errors import IntegrationFailure
+from scripts.higgsfield_utils import upload_higgsfield_file
+from scripts.uploader import upload_para_drive
 from webapp.model_registry import VideoModelConfig
 from webapp.schemas import CreateJobRequest, PlannerOutput
 
 
 ProgressCallback = Callable[[str, str], None]
+BRAND_CARD_DURATION_SECONDS = 3
+
+
+def _required_step_failure(
+    *,
+    service: str,
+    stage: str,
+    code: str,
+    message: str,
+    render_confirmed: bool | None = None,
+) -> IntegrationFailure:
+    return IntegrationFailure(
+        service=service,
+        stage=stage,
+        code=code,
+        user_message=message,
+        technical_message=message,
+        retryable=True,
+        render_confirmed=render_confirmed,
+        reason=code,
+    )
 
 
 def _gerar_video_com_fallback(
@@ -37,6 +64,7 @@ def _gerar_video_com_fallback(
     duracao: int,
     output_path: str,
     reference_image_url: str | None,
+    reference_image_path: Path | None,
     extra_arguments: dict,
 ) -> "Path | None":
     """Generate video with automatic fallback using VideoGenerator interface."""
@@ -66,6 +94,7 @@ def _gerar_video_com_fallback(
                 duration_seconds=duracao,
                 output_path=Path(output_path),
                 reference_image_url=reference_image_url,
+                reference_image_path=reference_image_path,
             )
             result = generator.generate(request)
             return result.output_path
@@ -121,8 +150,7 @@ def _upload_reference_image(image_path: str | Path | None) -> str | None:
 
     for attempt in range(1, max_retries + 1):
         try:
-            import higgsfield_client
-            url = higgsfield_client.upload_file(str(path))
+            url = upload_higgsfield_file(path)
             if attempt > 1:
                 _log.info(
                     "Reference image upload succeeded on attempt %d/%d",
@@ -179,9 +207,10 @@ def render_planned_video(
     # Determine which reference image to use for product shots
     # Priority: user-uploaded embalagem > default product image
     reference_image_url = None
+    reference_image_path = None
     shot_reference_flags = [
-        shot.product_overlay.ativo
-        or prompt_pede_referencia_produto(
+        not shot.product_overlay.ativo
+        and prompt_pede_referencia_produto(
             shot.visual_prompt_en,
             shot.narration_text_pt,
             shot.overlay_text,
@@ -192,6 +221,7 @@ def render_planned_video(
 
     if any(shot_reference_flags):
         if ref_embalagem_path:
+            reference_image_path = Path(ref_embalagem_path)
             # Upload user-provided packaging image
             if progress_cb:
                 progress_cb("uploading_ref", "Enviando imagem da embalagem como referência...")
@@ -205,6 +235,9 @@ def render_planned_video(
                 except Exception as exc:
                     warnings.append(f"Referência visual do produto indisponível: {exc}")
         else:
+            default_product = obter_path_imagem_produto()
+            if default_product and Path(default_product).exists():
+                reference_image_path = Path(default_product)
             try:
                 reference_image_url = obter_url_imagem_produto()
             except Exception as exc:
@@ -241,6 +274,7 @@ def render_planned_video(
             duracao=shot.duration_seconds,
             output_path=f"{base_path}.mp4",
             reference_image_url=reference_image_url if should_use_reference else None,
+            reference_image_path=reference_image_path if should_use_reference else None,
             extra_arguments=model_config.default_arguments,
         )
         if not video_path:
@@ -264,9 +298,19 @@ def render_planned_video(
                 )
                 if combined_path:
                     current_video_path = Path(combined_path)
+                else:
+                    raise _required_step_failure(
+                        service="ffmpeg",
+                        stage="composing_audio",
+                        code="audio_composition_failed",
+                        message=f"Falha ao combinar a narração da cena {shot.shot_number}.",
+                    )
             else:
-                warnings.append(
-                    f"Não foi possível gerar a narração da cena {shot.shot_number}; a cena segue sem áudio."
+                raise _required_step_failure(
+                    service="elevenlabs",
+                    stage="generating_audio",
+                    code="narration_failed",
+                    message=f"Falha ao gerar a narração da cena {shot.shot_number}.",
                 )
 
         if shot.product_overlay.ativo:
@@ -281,8 +325,11 @@ def render_planned_video(
             if overlay_path:
                 current_video_path = Path(overlay_path)
             else:
-                warnings.append(
-                    f"O overlay do produto falhou na cena {shot.shot_number}; a cena segue sem embalagem real."
+                raise _required_step_failure(
+                    service="ffmpeg",
+                    stage="composing",
+                    code="product_overlay_failed",
+                    message=f"Falha ao aplicar a embalagem na cena {shot.shot_number}.",
                 )
 
         if shot.overlay_text:
@@ -295,8 +342,11 @@ def render_planned_video(
             if text_path:
                 current_video_path = Path(text_path)
             else:
-                warnings.append(
-                    f"O texto de tela falhou na cena {shot.shot_number}; a cena segue sem overlay textual."
+                raise _required_step_failure(
+                    service="ffmpeg",
+                    stage="composing",
+                    code="text_overlay_failed",
+                    message=f"Falha ao aplicar o texto da cena {shot.shot_number}.",
                 )
 
         rendered_scenes.append(str(current_video_path))
@@ -312,6 +362,7 @@ def render_planned_video(
         if default_product and Path(default_product).exists():
             card_image_path = Path(default_product)
 
+    card_duration = 0
     if card_image_path:
         if progress_cb:
             progress_cb("composing", "Gerando card final com a logo da marca...")
@@ -319,14 +370,20 @@ def render_planned_video(
         card_video = gerar_card_logo(
             card_final_path,
             card_image_path,
-            duracao=3,
+            duracao=BRAND_CARD_DURATION_SECONDS,
             largura=largura,
             altura=altura,
         )
         if card_video:
             rendered_scenes.append(str(card_video))
+            card_duration = BRAND_CARD_DURATION_SECONDS
         else:
-            warnings.append("Não foi possível gerar o card final com a logo enviada.")
+            raise _required_step_failure(
+                service="ffmpeg",
+                stage="composing",
+                code="brand_card_failed",
+                message="Falha ao gerar o card final da marca.",
+            )
 
     if progress_cb:
         progress_cb("composing", "Compondo vídeo final e aplicando marca da empresa...")
@@ -338,9 +395,32 @@ def render_planned_video(
         largura=largura,
         altura=altura,
         output_dir=final_dir,
+        duracao_maxima=request.duration_seconds,
+        duracao_card_final=card_duration,
     )
     if not final_video:
-        raise RuntimeError("Falha na composição do vídeo final.")
+        raise _required_step_failure(
+            service="ffmpeg",
+            stage="composing",
+            code="final_video_invalid",
+            message="Falha na composição ou validação do vídeo final.",
+        )
+
+    if progress_cb:
+        progress_cb("uploading_drive", "Tentando enviar o vídeo final para o Google Drive...")
+    drive_result = upload_para_drive(final_video)
+    if not drive_result and JW_DRIVE_REQUIRED:
+        raise _required_step_failure(
+            service="google_drive",
+            stage="uploading_drive",
+            code="drive_upload_failed",
+            message="Falha ao entregar o vídeo final no Google Drive.",
+            render_confirmed=True,
+        )
+    if not drive_result:
+        warnings.append(
+            "Google Drive indisponível; o vídeo permanece disponível para download pelo Studio."
+        )
 
     manifest_path = job_dir / "manifesto_render.json"
     manifest_path.write_text(
@@ -353,6 +433,7 @@ def render_planned_video(
                 "resolucao": request.resolution,
                 "cenas": rendered_scenes,
                 "saida_final": str(final_video),
+                "google_drive": drive_result,
                 "ref_embalagem_usada": ref_embalagem_path or "padrão",
                 "ref_logo_usada": str(logo_path_to_use) if logo_path_to_use else "nenhuma",
                 "logo_overlay_aplicado": apply_logo_overlay,
@@ -366,5 +447,7 @@ def render_planned_video(
 
     return {
         "final_video_path": str(final_video),
+        "drive_file_id": drive_result.get("id") if drive_result else None,
+        "drive_url": drive_result.get("link") if drive_result else None,
         "warnings": warnings,
     }

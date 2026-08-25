@@ -6,12 +6,60 @@ from datetime import datetime
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from scripts.config import GOOGLE_SERVICE_ACCOUNT_FILE, GOOGLE_DRIVE_FOLDER_ID, PROJECT_ROOT
+from scripts.config import (
+    GOOGLE_DRIVE_FOLDER_ID,
+    GOOGLE_OAUTH_TOKEN_FILE,
+    GOOGLE_SERVICE_ACCOUNT_FILE,
+    PROJECT_ROOT,
+)
+
+
+DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
 
 
 def log(msg):
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"  [{ts}] {msg}")
+
+
+def resolve_config_path(value):
+    path = Path(value)
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def load_oauth_credentials():
+    token_path = resolve_config_path(GOOGLE_OAUTH_TOKEN_FILE)
+    if not token_path.exists():
+        return None
+
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+
+    credentials = Credentials.from_authorized_user_file(
+        str(token_path),
+        scopes=[DRIVE_SCOPE],
+    )
+    if credentials.expired and credentials.refresh_token:
+        credentials.refresh(Request())
+    if not credentials.valid:
+        raise RuntimeError("Token OAuth do Google Drive inválido ou revogado.")
+    return credentials
+
+
+def load_drive_credentials():
+    oauth_credentials = load_oauth_credentials()
+    if oauth_credentials:
+        return oauth_credentials
+
+    from google.oauth2 import service_account
+
+    service_account_path = resolve_config_path(GOOGLE_SERVICE_ACCOUNT_FILE)
+    if not service_account_path.exists():
+        raise FileNotFoundError("Credencial do Google Drive não encontrada.")
+    return service_account.Credentials.from_service_account_file(
+        str(service_account_path),
+        scopes=[DRIVE_SCOPE],
+    )
 
 
 def upload_para_drive(arquivo_local, nome_arquivo=None, mimetype="video/mp4"):
@@ -20,28 +68,15 @@ def upload_para_drive(arquivo_local, nome_arquivo=None, mimetype="video/mp4"):
     if nome_arquivo is None:
         nome_arquivo = arquivo_local.name
 
-    # Verificar configuração
-    sa_path = Path(GOOGLE_SERVICE_ACCOUNT_FILE)
-    if not sa_path.is_absolute():
-        sa_path = PROJECT_ROOT / sa_path
-
-    if not sa_path.exists():
-        log("Google Drive não configurado (service account não encontrada). Pulando upload.")
-        return None
-
     if not GOOGLE_DRIVE_FOLDER_ID or GOOGLE_DRIVE_FOLDER_ID.startswith("your_"):
         log("GOOGLE_DRIVE_FOLDER_ID não configurado. Pulando upload.")
         return None
 
     try:
-        from google.oauth2 import service_account
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
 
-        creds = service_account.Credentials.from_service_account_file(
-            str(sa_path),
-            scopes=["https://www.googleapis.com/auth/drive.file"],
-        )
+        creds = load_drive_credentials()
         service = build("drive", "v3", credentials=creds)
 
         file_metadata = {
@@ -56,16 +91,8 @@ def upload_para_drive(arquivo_local, nome_arquivo=None, mimetype="video/mp4"):
             body=file_metadata,
             media_body=media,
             fields="id, name, webViewLink",
+            supportsAllDrives=True,
         ).execute()
-
-        # Tentar tornar acessível por link
-        try:
-            service.permissions().create(
-                fileId=uploaded["id"],
-                body={"role": "reader", "type": "anyone"},
-            ).execute()
-        except Exception:
-            pass  # Permissão pode falhar, não é crítico
 
         link = uploaded.get("webViewLink", f"https://drive.google.com/file/d/{uploaded['id']}/view")
         log(f"✓ Upload OK: {link}")

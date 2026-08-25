@@ -64,7 +64,7 @@ class TestSubprocessRunDefaultTimeout:
             # Mock probe to return no audio
             probe_mock = MagicMock(returncode=0, stdout='{"streams":[]}', stderr="")
             ffmpeg_mock = MagicMock(returncode=0, stdout="", stderr="")
-            mock_run.side_effect = [probe_mock, ffmpeg_mock, ffmpeg_mock]
+            mock_run.side_effect = [probe_mock, probe_mock, ffmpeg_mock, ffmpeg_mock]
 
             normalizar_cena(
                 Path("/tmp/test.mp4"),

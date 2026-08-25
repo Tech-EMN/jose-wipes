@@ -33,7 +33,7 @@ TESTES = [
     ("Web App", "test_web_app.py"),
     ("Web Server Runner", "test_web_server.py"),
     ("Hostinger Compose", "test_hostinger_compose.py"),
-    ("Hostinger GitHub Actions", "test_hostinger_github_actions.py"),
+    ("EasyPanel GitHub Actions", "test_easypanel_github_actions.py"),
     ("Cleanup Retention", "test_cleanup_retention.py"),
 ]
 

@@ -28,17 +28,20 @@ Cada shot e filmado em estilo de cinema premium:
 - SEMPRE incluir: sujeito + acao + ambiente + iluminacao + camera + estilo + aspecto
 - SEMPRE especificar idade, tipo fisico, roupa e expressao facial dos personagens
 - NUNCA incluir texto renderizado, nome 'Jose Wipes', nome da marca, tipografia ou logo no prompt visual — a IA de video alucinaria uma versao distorcida
-- Quando product_overlay.ativo for true: NUNCA descreva o pacote no prompt — descreva apenas a cena/personagem com maos vazias; o pipeline sobrepoe o produto real depois
+- Quando product_overlay.ativo for true: descreva SOMENTE ambiente, iluminacao, camera e personagens com maos vazias; mantenha uma area livre na posicao do overlay
+- Quando product_overlay.ativo for true: o prompt visual nao pode conter pacote, embalagem, produto, wipes, logo, rotulo, tipografia ou qualquer objeto substituto
+- Quando product_overlay.ativo for true: use camera fixa; crie movimento apenas com mudancas sutis de luz e sombra para o overlay permanecer integrado
 - Quando product_overlay.ativo for true e o shot tiver personagem, descreva o personagem com MAOS VAZIAS subindo/erguendo/estendendo nos primeiros 2 segundos — o pipeline compoe o produto real DEPOIS desse gesto
 - Em cenas SEM product_overlay.ativo que precisem de produto, pode referenciar genericamente 'a white rectangular wet wipes package' sem descrever texto, logo ou escudo
 
-## REFERENCIA VISUAL DO PRODUTO
-O pipeline injeta automaticamente a imagem real da embalagem Jose Wipes via reference_image_urls (Soul Mode da Higgsfield).
-Em cenas com product_overlay ativo, NUNCA descreva um pacote especifico no prompt — a IA geraria um pacote generico que conflita com o real.
-Em vez disso, descreva a cena e o personagem, e o pipeline cuida de sobrepor o produto real.
+## COMPOSICAO VISUAL DO PRODUTO
+Em cenas com product_overlay ativo, o pipeline NAO envia a embalagem ao gerador de video.
+O gerador cria somente o fundo e o movimento; depois o pipeline sobrepoe uma unica imagem oficial com rotulo fiel.
+Descreva a cena e os personagens, preserve uma area vazia para a composicao e nunca peca um objeto substituto.
 
 ## NARRACAO E SINCRONIA
 - Cada shot tem {shot_duration}s. Narracao em portugues deve caber confortavelmente, com pausa final.
+- Quando `narration_forbidden` for true, use narration_text_pt vazio e instrua apenas som ambiente, sem voz, dialogo, vocal ou narracao.
 - Limite duro: ate {max_words} palavras em `narration_text_pt` por shot (idealmente 7-{max_words}).
 - Frases curtas, com punch. Use reticencias '...' para indicar respiracao quando precisar.
 - Evite numeros longos ou siglas dificeis. Quando precisar dizer a marca, escreva 'José uáipes' (grafia fonetica) em narration_text_pt — assim a IA de voz pronuncia certo. Em overlay_text use 'José Wipes' normal.
