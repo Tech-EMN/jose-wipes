@@ -22,9 +22,8 @@ class TestCICDWorkflow:
 
     def test_workflow_has_name(self, workflow_path):
         """Workflow must have a name."""
-        import yaml
-        content = yaml.safe_load(workflow_path.read_text())
-        assert "name" in content
+        first_line = workflow_path.read_text(encoding="utf-8").splitlines()[0]
+        assert first_line.startswith("name:")
 
     def test_workflow_triggers_on_push_main(self, workflow_path):
         """Workflow must trigger on push to main."""
