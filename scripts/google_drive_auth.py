@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
+import os
+import tempfile
+from pathlib import Path
 
 from scripts.config import GOOGLE_OAUTH_CLIENT_FILE, GOOGLE_OAUTH_TOKEN_FILE
 from scripts.uploader import DRIVE_SCOPE, load_oauth_credentials, resolve_config_path
@@ -15,7 +15,27 @@ FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 FOLDER_NAME = "José Wipes - Local"
 
 
+def _write_oauth_token(token_path: Path, payload: str) -> None:
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=token_path.parent,
+        prefix=f".{token_path.name}.",
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as token_file:
+            token_file.write(payload)
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, token_path)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+
 def authorize_google_drive():
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import build
+
     credentials = load_oauth_credentials()
     token_path = resolve_config_path(GOOGLE_OAUTH_TOKEN_FILE)
 
@@ -28,8 +48,7 @@ def authorize_google_drive():
             scopes=[DRIVE_SCOPE],
         )
         credentials = flow.run_local_server(port=0)
-        token_path.parent.mkdir(parents=True, exist_ok=True)
-        token_path.write_text(credentials.to_json(), encoding="utf-8")
+        _write_oauth_token(token_path, credentials.to_json())
 
     service = build("drive", "v3", credentials=credentials)
     query = (

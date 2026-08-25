@@ -12,9 +12,12 @@ Um job só termina como `completed` quando:
 - narração, embalagem e textos solicitados foram aplicados;
 - o MP4 final possui H.264, áudio AAC, duração válida e a resolução escolhida;
 - a saída vertical em 1080p mede exatamente `1080x1920`;
-- o upload obrigatório para o Google Drive foi concluído.
+- em jobs Higgsfield 1080p, o arquivo bruto do provedor também precisa medir `1080x1920` antes da composição; upscale não é aceito como prova;
+- quando `JW_DRIVE_REQUIRED=true`, o upload para o Google Drive foi concluído.
 
 Falha em qualquer etapa obrigatória encerra o job como `failed`. A meta operacional do desafio é concluir cada vídeo em até 20 minutos e comprovar pelo menos 80% de sucesso em uma amostra mínima de 10 jobs.
+
+Enquanto a Atria não confirmar se o Drive é obrigatório, `JW_DRIVE_REQUIRED=false` mantém o download pelo Studio como entrega válida. O sistema ainda tenta enviar ao Drive quando ele está configurado; uma falha nesse envio gera aviso, mas preserva o vídeo local.
 
 ---
 
@@ -34,7 +37,7 @@ Falha em qualquer etapa obrigatória encerra o job como `failed`. A meta operaci
    python scripts/pipeline.py "Seu briefing aqui"
    ```
 4. Aguarde a conclusão, com meta máxima de 20 minutos
-5. O vídeo final estará em `output/final/` e no Google Drive
+5. O vídeo final estará em `output/final/` para download e, quando configurado, no Google Drive
 
 ### 4 exemplos prontos para copiar/colar
 
@@ -142,13 +145,22 @@ O sistema já sabe pelo brandbook:
 python scripts/health_check.py
 ```
 
-## Deploy em produção na Hostinger
+## Google Drive OAuth para uso local
 
-Para subir a interface web com Docker Manager, Traefik, HTTPS, BasicAuth e volumes persistentes na Hostinger, use:
+Para autorizar uma conta pessoal do Google somente no ambiente local:
 
-- `HOSTINGER_DEPLOY.md`
-- `docker-compose.hostinger.yml`
-- `.env.hostinger.example`
+1. coloque o cliente OAuth em `credentials/google-oauth-client.json` ou ajuste `GOOGLE_OAUTH_CLIENT_FILE`;
+2. execute `python -m scripts.google_drive_auth`;
+3. conclua a autorização no navegador;
+4. preserve o token gerado em `credentials/google-oauth-token.json` ou ajuste `GOOGLE_OAUTH_TOKEN_FILE`.
+
+Os arquivos OAuth e o token não devem ser enviados ao Git. Em Windows, mantenha a pasta `credentials` com acesso restrito ao usuário da aplicação; em sistemas POSIX, o token é gravado com modo `0600`.
+
+## Deploy em produção no EasyPanel
+
+O fluxo atual usa GitHub Actions e o Deployment Trigger URL do EasyPanel. Consulte `EASYPANEL_DEPLOY.md`.
+
+`HOSTINGER_DEPLOY.md`, `docker-compose.hostinger.yml` e `.env.hostinger.example` permanecem apenas como alternativa legada.
 
 ## Contato suporte
 

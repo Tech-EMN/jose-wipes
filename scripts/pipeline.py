@@ -14,6 +14,7 @@ from scripts.config import (
     decompor_briefing,
     OUTPUT_DIR,
     ASSETS_DIR,
+    JW_DRIVE_REQUIRED,
     obter_logo_path,
     obter_url_imagem_produto,
 )
@@ -324,8 +325,11 @@ def executar_pipeline(briefing=None, plano=None):
         if drive_result:
             resultado["video_drive"] = drive_result
             resultado["sucesso"] = True
-        else:
+        elif JW_DRIVE_REQUIRED:
             print("  ✗ Upload obrigatório para o Google Drive falhou")
+        else:
+            resultado["sucesso"] = True
+            print("  ! Google Drive indisponível; vídeo local pronto para download")
 
     # ========== RESUMO ==========
     print(f"\n{'=' * 60}")

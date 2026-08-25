@@ -44,6 +44,9 @@ OPENAI_PLANNER_MODEL = os.getenv("OPENAI_PLANNER_MODEL", "gpt-4.1-mini")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "")
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
+JW_DRIVE_REQUIRED = os.getenv("JW_DRIVE_REQUIRED", "false").strip().lower() in {
+    "true", "1", "yes", "sim",
+}
 GOOGLE_OAUTH_CLIENT_FILE = os.getenv(
     "GOOGLE_OAUTH_CLIENT_FILE",
     "./credentials/google-oauth-client.json",
@@ -69,9 +72,12 @@ def validar_configuracao():
         "HF_API_SECRET": HF_API_SECRET,
         "OPENAI_API_KEY": OPENAI_API_KEY,
         "ELEVENLABS_API_KEY": ELEVENLABS_API_KEY,
-        "GOOGLE_SERVICE_ACCOUNT_FILE": GOOGLE_SERVICE_ACCOUNT_FILE,
-        "GOOGLE_DRIVE_FOLDER_ID": GOOGLE_DRIVE_FOLDER_ID,
     }
+    if JW_DRIVE_REQUIRED:
+        chaves.update({
+            "GOOGLE_SERVICE_ACCOUNT_FILE": GOOGLE_SERVICE_ACCOUNT_FILE,
+            "GOOGLE_DRIVE_FOLDER_ID": GOOGLE_DRIVE_FOLDER_ID,
+        })
 
     print("=" * 50)
     print("VALIDAÇÃO DE CONFIGURAÇÃO — José Wipes Pipeline")

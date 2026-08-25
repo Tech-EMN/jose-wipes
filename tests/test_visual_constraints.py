@@ -183,7 +183,57 @@ def test_compositor_rejects_partial_normalization(tmp_path: Path) -> None:
     concat_mock.assert_not_called()
 
 
-def test_render_requires_drive_delivery(tmp_path: Path) -> None:
+def test_compositor_reserves_requested_duration_for_final_card(tmp_path: Path) -> None:
+    scenes = [tmp_path / "scene.mp4", tmp_path / "card.mp4"]
+    normalized = [tmp_path / "scene-normalized.mp4", tmp_path / "card-normalized.mp4"]
+    final_path = tmp_path / "final" / "result.mp4"
+    probe = json.dumps(
+        {
+            "format": {"duration": "10.0", "size": "1024"},
+            "streams": [
+                {"codec_type": "video", "codec_name": "h264", "width": 720, "height": 1280},
+                {"codec_type": "audio", "codec_name": "aac"},
+            ],
+        }
+    )
+
+    with patch(
+        "scripts.compositor.normalizar_cena",
+        side_effect=normalized,
+    ), patch(
+        "scripts.compositor.concatenar_cenas",
+        side_effect=lambda _scenes, output: Path(output),
+    ) as concat_mock, patch(
+        "scripts.compositor._limitar_duracao",
+        side_effect=lambda path, _duration: Path(path),
+    ) as limiter_mock, patch(
+        "scripts.compositor.adicionar_logo_overlay",
+        return_value=final_path,
+    ), patch(
+        "scripts.compositor._subprocess_run",
+        return_value=type("Probe", (), {"stdout": probe})(),
+    ):
+        result = compor_video_final(
+            scenes,
+            "Jose Wipes",
+            largura=720,
+            altura=1280,
+            output_dir=tmp_path / "final",
+            duracao_maxima=10,
+            duracao_card_final=3,
+        )
+
+    assert result is not None
+    limiter_mock.assert_called_once()
+    assert limiter_mock.call_args.args[1] == 7
+    assert concat_mock.call_args_list[-1].args[0][-1] == normalized[-1]
+
+
+@pytest.mark.parametrize("drive_required", [False, True])
+def test_render_respects_drive_delivery_policy(
+    tmp_path: Path,
+    drive_required: bool,
+) -> None:
     plan = PlannerOutput(
         title="Jose Wipes",
         enhanced_brief_pt="Cena institucional.",
@@ -201,17 +251,8 @@ def test_render_requires_drive_delivery(tmp_path: Path) -> None:
     final_path = tmp_path / "final.mp4"
     final_path.write_bytes(b"final")
 
-    with patch(
-        "webapp.pipeline_service._gerar_video_com_fallback",
-        return_value=generated_path,
-    ), patch(
-        "webapp.pipeline_service.obter_path_imagem_produto", return_value=None
-    ), patch(
-        "webapp.pipeline_service.compor_video_final", return_value=final_path
-    ), patch("webapp.pipeline_service.upload_para_drive", return_value=None), pytest.raises(
-        IntegrationFailure
-    ) as captured:
-        render_planned_video(
+    def render() -> dict[str, object]:
+        return render_planned_video(
             job_dir=tmp_path / "job",
             request=_request("Crie uma cena institucional sem narração."),
             plan=plan,
@@ -219,9 +260,32 @@ def test_render_requires_drive_delivery(tmp_path: Path) -> None:
             apply_logo_overlay=False,
         )
 
-    assert captured.value.service == "google_drive"
-    assert captured.value.code == "drive_upload_failed"
-    assert captured.value.render_confirmed is True
+    with patch(
+        "webapp.pipeline_service._gerar_video_com_fallback",
+        return_value=generated_path,
+    ), patch(
+        "webapp.pipeline_service.obter_path_imagem_produto", return_value=None
+    ), patch(
+        "webapp.pipeline_service.compor_video_final", return_value=final_path
+    ), patch(
+        "webapp.pipeline_service.upload_para_drive", return_value=None
+    ), patch("webapp.pipeline_service.JW_DRIVE_REQUIRED", drive_required):
+        if drive_required:
+            with pytest.raises(IntegrationFailure) as captured:
+                render()
+
+            assert captured.value.service == "google_drive"
+            assert captured.value.code == "drive_upload_failed"
+            assert captured.value.render_confirmed is True
+            return
+
+        result = render()
+
+    assert result["final_video_path"] == str(final_path)
+    assert result["drive_url"] is None
+    assert result["warnings"] == [
+        "Google Drive indisponível; o vídeo permanece disponível para download pelo Studio."
+    ]
 
 
 def test_none_logo_path_copies_video_without_watermark(tmp_path: Path) -> None:

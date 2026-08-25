@@ -13,7 +13,11 @@ from scripts.compositor import (
     gerar_card_logo,
     overlay_produto,
 )
-from scripts.config import obter_path_imagem_produto, obter_url_imagem_produto
+from scripts.config import (
+    JW_DRIVE_REQUIRED,
+    obter_path_imagem_produto,
+    obter_url_imagem_produto,
+)
 from scripts.product_reference import prompt_pede_referencia_produto
 from scripts.gerador_midia import (
     combinar_video_audio,
@@ -28,6 +32,7 @@ from webapp.schemas import CreateJobRequest, PlannerOutput
 
 
 ProgressCallback = Callable[[str, str], None]
+BRAND_CARD_DURATION_SECONDS = 3
 
 
 def _required_step_failure(
@@ -357,6 +362,7 @@ def render_planned_video(
         if default_product and Path(default_product).exists():
             card_image_path = Path(default_product)
 
+    card_duration = 0
     if card_image_path:
         if progress_cb:
             progress_cb("composing", "Gerando card final com a logo da marca...")
@@ -364,12 +370,13 @@ def render_planned_video(
         card_video = gerar_card_logo(
             card_final_path,
             card_image_path,
-            duracao=3,
+            duracao=BRAND_CARD_DURATION_SECONDS,
             largura=largura,
             altura=altura,
         )
         if card_video:
             rendered_scenes.append(str(card_video))
+            card_duration = BRAND_CARD_DURATION_SECONDS
         else:
             raise _required_step_failure(
                 service="ffmpeg",
@@ -389,6 +396,7 @@ def render_planned_video(
         altura=altura,
         output_dir=final_dir,
         duracao_maxima=request.duration_seconds,
+        duracao_card_final=card_duration,
     )
     if not final_video:
         raise _required_step_failure(
@@ -399,15 +407,19 @@ def render_planned_video(
         )
 
     if progress_cb:
-        progress_cb("uploading_drive", "Enviando vídeo final para o Google Drive...")
+        progress_cb("uploading_drive", "Tentando enviar o vídeo final para o Google Drive...")
     drive_result = upload_para_drive(final_video)
-    if not drive_result:
+    if not drive_result and JW_DRIVE_REQUIRED:
         raise _required_step_failure(
             service="google_drive",
             stage="uploading_drive",
             code="drive_upload_failed",
             message="Falha ao entregar o vídeo final no Google Drive.",
             render_confirmed=True,
+        )
+    if not drive_result:
+        warnings.append(
+            "Google Drive indisponível; o vídeo permanece disponível para download pelo Studio."
         )
 
     manifest_path = job_dir / "manifesto_render.json"

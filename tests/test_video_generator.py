@@ -122,6 +122,9 @@ class TestHiggsfieldVideoGenerator:
 
         with patch.dict(sys.modules, {"higgsfield_client": client}), patch(
             "scripts.gerador_midia._subprocess_run", side_effect=download
+        ), patch(
+            "scripts.gerador_midia._probe_video_dimensions",
+            return_value=(1080, 1920),
         ), patch("scripts.gerador_midia.time.sleep"):
             result = gerar_video_higgsfield(
                 "kling-video/v2.1/master/text-to-video",
@@ -133,8 +136,58 @@ class TestHiggsfieldVideoGenerator:
 
         assert result == output_path
         client.submit.assert_called_once()
+        assert client.submit.call_args.kwargs["arguments"]["resolution"] == "1080p"
         assert client.status.call_count == 3
         client.result.assert_called_once_with("request-1")
+
+    def test_rejects_non_native_1080p_provider_output(self, tmp_path):
+        class Completed:
+            pass
+
+        class Failed:
+            pass
+
+        class NSFW:
+            pass
+
+        class Cancelled:
+            pass
+
+        client = SimpleNamespace(
+            Completed=Completed,
+            Failed=Failed,
+            NSFW=NSFW,
+            Cancelled=Cancelled,
+            submit=MagicMock(return_value=SimpleNamespace(request_id="request-1")),
+            status=MagicMock(return_value=Completed()),
+            result=MagicMock(
+                return_value={"video": {"url": "https://example.com/video.mp4"}}
+            ),
+        )
+        output_path = tmp_path / "video.mp4"
+
+        def download(command, **_kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(b"video")
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.dict(sys.modules, {"higgsfield_client": client}), patch(
+            "scripts.gerador_midia._subprocess_run",
+            side_effect=download,
+        ), patch(
+            "scripts.gerador_midia._probe_video_dimensions",
+            return_value=(720, 1280),
+        ), pytest.raises(IntegrationFailure) as captured:
+            gerar_video_higgsfield(
+                "kling-video/v2.1/master/text-to-video",
+                "A vertical commercial",
+                resolucao="1080p",
+                output_path=output_path,
+                max_retries=0,
+                raise_on_failure=True,
+            )
+
+        assert captured.value.code == "native_resolution_mismatch"
+        assert not output_path.exists()
 
 
 class TestOpenAISoraVideoGenerator:

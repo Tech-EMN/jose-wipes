@@ -569,7 +569,7 @@ def _limitar_duracao(video_path, duracao_segundos):
 
 def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
                        largura=1080, altura=1920, fps=24, output_dir=None,
-                       duracao_maxima=None):
+                       duracao_maxima=None, duracao_card_final=0):
     """Pipeline completo: normalizar → concatenar → logo → exportar. Retorna path ou None."""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     titulo_safe = "".join(c if c.isalnum() or c in "_ -" else "_" for c in titulo)
@@ -599,6 +599,26 @@ def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
         log("✗ Nenhuma cena normalizada com sucesso!")
         return None
 
+    if duracao_card_final:
+        if duracao_maxima is None or len(normalizados) < 2:
+            _cleanup(temp_files)
+            return None
+        duracao_conteudo = float(duracao_maxima) - float(duracao_card_final)
+        if duracao_conteudo <= 0:
+            _cleanup(temp_files)
+            return None
+        conteudo_path = final_dir / f"_conteudo_{ts}.mp4"
+        temp_files.append(conteudo_path)
+        result = concatenar_cenas(normalizados[:-1], conteudo_path)
+        if not result:
+            _cleanup(temp_files)
+            return None
+        result = _limitar_duracao(conteudo_path, duracao_conteudo)
+        if not result:
+            _cleanup(temp_files)
+            return None
+        normalizados = [result, normalizados[-1]]
+
     # 2. Concatenar
     concat_path = final_dir / f"_concat_{ts}.mp4"
     temp_files.append(concat_path)
@@ -614,7 +634,7 @@ def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
         _cleanup(temp_files)
         return None
 
-    if duracao_maxima is not None:
+    if duracao_maxima is not None and not duracao_card_final:
         result = _limitar_duracao(final_path, duracao_maxima)
         if not result:
             _cleanup(temp_files)

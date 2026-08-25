@@ -90,6 +90,7 @@ def get_external_health() -> JSONResponse:
     payload = probe_external_health(
         startup_mode=runtime_status.get("startup_mode"),
         external_connectivity_checked=runtime_status.get("external_connectivity_checked"),
+        use_cached_probes=True,
     )
     updated_runtime = mark_external_connectivity_checked(ok=payload.ready_for_submit)
     if updated_runtime:

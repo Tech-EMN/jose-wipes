@@ -165,6 +165,8 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
                 else:
                     args["resolution"] = resolucao
             else:
+                if is_kling:
+                    args["resolution"] = resolucao
                 # Kling models só aceitam duração 5 ou 10
                 if is_i2v_model or is_kling:
                     duracao = 5 if duracao <= 7 else 10
@@ -249,7 +251,7 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
 
             for download_attempt in range(1, 4):
                 result = _subprocess_run(
-                    ["curl", "-sL", "-o", str(output_path), url],
+                    ["curl", "-fsSL", "-o", str(output_path), url],
                     capture_output=True, timeout=120
                 )
                 if (
@@ -257,12 +259,42 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
                     and output_path.exists()
                     and output_path.stat().st_size > 0
                 ):
+                    if not is_image_model and resolucao == "1080p":
+                        expected_dimensions = (
+                            (1080, 1920) if aspecto == "9:16" else (1920, 1080)
+                        )
+                        actual_dimensions = _probe_video_dimensions(output_path)
+                        if actual_dimensions != expected_dimensions:
+                            output_path.unlink(missing_ok=True)
+                            last_failure = IntegrationFailure(
+                                service="higgsfield",
+                                stage="validating_output",
+                                code="native_resolution_mismatch",
+                                user_message=(
+                                    "A Higgsfield não entregou o vídeo em 1080p nativo. "
+                                    "A geração foi rejeitada para evitar upscale indevido."
+                                ),
+                                technical_message=(
+                                    f"expected={expected_dimensions}, actual={actual_dimensions}"
+                                ),
+                                retryable=False,
+                                auth_confirmed=True,
+                                submit_confirmed=True,
+                                render_confirmed=True,
+                                reason="native_resolution_mismatch",
+                            )
+                            break
                     size = output_path.stat().st_size / (1024 * 1024)
                     log(f"✓ Salvo: {output_path} ({size:.1f} MB)")
                     return output_path
                 if download_attempt < 3:
                     time.sleep(2 ** download_attempt)
 
+            if (
+                last_failure is not None
+                and last_failure.code == "native_resolution_mismatch"
+            ):
+                break
             last_failure = classify_higgsfield_exception(
                 RuntimeError(f"download failed for output url: {url}"),
                 stage="generating",
@@ -317,6 +349,31 @@ def _probe_duration_seconds(path):
             return None
         return float(text)
     except (subprocess.SubprocessError, ValueError):
+        return None
+
+
+def _probe_video_dimensions(path):
+    try:
+        result = _subprocess_run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=p=0:s=x",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        width, height = result.stdout.strip().split("x", 1)
+        return int(width), int(height)
+    except (AttributeError, OSError, subprocess.SubprocessError, TypeError, ValueError):
         return None
 
 
