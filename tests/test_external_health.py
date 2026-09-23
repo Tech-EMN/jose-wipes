@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from scripts.external_health import _metadata_timestamp, probe_external_health
 from scripts.health_check import check_higgsfield, check_openai
+from scripts.higgsfield_api import HiggsfieldAuthOutcome, HiggsfieldAuthProbeResult
 
 
 def test_elevenlabs_failure_blocks_narrated_job_submission() -> None:
@@ -114,8 +115,8 @@ def test_later_higgsfield_success_clears_credit_failure(tmp_path) -> None:
         health = probe_external_health(jobs_dir=tmp_path)
 
     assert health.ready_for_submit is True
-    assert health.services["higgsfield_auth"].auth_confirmed is False
-    assert health.services["higgsfield_auth"].reason == "credentials_configured"
+    assert health.services["higgsfield_auth"].auth_confirmed is True
+    assert health.services["higgsfield_auth"].reason == "auth_confirmed"
 
 
 def test_expired_higgsfield_credit_failure_does_not_block_submission(tmp_path) -> None:
@@ -150,8 +151,8 @@ def test_expired_higgsfield_credit_failure_does_not_block_submission(tmp_path) -
         health = probe_external_health(jobs_dir=tmp_path)
 
     assert health.ready_for_submit is True
-    assert health.services["higgsfield_auth"].auth_confirmed is False
-    assert health.services["higgsfield_auth"].reason == "credentials_configured"
+    assert health.services["higgsfield_auth"].auth_confirmed is True
+    assert health.services["higgsfield_auth"].reason == "auth_confirmed"
 
 
 def test_provider_probes_are_cached() -> None:
@@ -200,15 +201,66 @@ def test_openai_health_uses_non_generative_model_lookup() -> None:
     client.models.retrieve.assert_called_once_with("gpt-4.1-mini")
 
 
-def test_higgsfield_health_only_checks_configured_credentials() -> None:
+def _check_higgsfield_with_probe(probe: HiggsfieldAuthProbeResult) -> tuple[bool, str]:
     with patch("scripts.health_check.HF_API_KEY", "test-key"), patch(
         "scripts.health_check.HF_API_SECRET",
         "test-secret",
-    ), patch.dict(sys.modules, {"higgsfield_client": None}):
-        ok, message = check_higgsfield()
+    ), patch("scripts.higgsfield_api.probe_higgsfield_auth", return_value=probe):
+        return check_higgsfield()
+
+
+def test_higgsfield_health_confirms_authentication_with_provider() -> None:
+    ok, message = _check_higgsfield_with_probe(
+        HiggsfieldAuthProbeResult(HiggsfieldAuthOutcome.AUTHENTICATED, "HTTP 404: not found")
+    )
 
     assert ok is True
-    assert message.startswith("Credenciais configuradas")
+    assert message == "Autenticacao confirmada"
+
+
+def test_higgsfield_health_reports_rejected_credentials() -> None:
+    ok, message = _check_higgsfield_with_probe(
+        HiggsfieldAuthProbeResult(HiggsfieldAuthOutcome.UNAUTHORIZED, "HTTP 401: Invalid API key")
+    )
+
+    assert ok is False
+    assert message == "Erro: HTTP 401: Invalid API key"
+
+
+def test_higgsfield_health_skips_provider_call_without_credentials() -> None:
+    probe = MagicMock()
+    with patch("scripts.health_check.HF_API_KEY", ""), patch(
+        "scripts.health_check.HF_API_SECRET",
+        "",
+    ), patch("scripts.higgsfield_api.probe_higgsfield_auth", probe):
+        ok, message = check_higgsfield()
+
+    assert ok is False
+    assert message == "Credenciais nao configuradas"
+    probe.assert_not_called()
+
+
+def test_rejected_higgsfield_credentials_surface_classified_reason() -> None:
+    with patch(
+        "scripts.external_health.check_ffmpeg",
+        return_value=(True, "ok"),
+    ), patch(
+        "scripts.external_health.check_openai",
+        return_value=(True, "ok"),
+    ), patch(
+        "scripts.external_health.check_higgsfield",
+        return_value=(False, "Erro: HTTP 401: Invalid API key"),
+    ), patch(
+        "scripts.external_health.check_elevenlabs",
+        return_value=(True, "ok"),
+    ):
+        health = probe_external_health()
+
+    higgsfield = health.services["higgsfield_auth"]
+    assert higgsfield.ok is False
+    assert higgsfield.auth_confirmed is False
+    assert higgsfield.reason == "auth_invalid"
+    assert "Invalid API key" not in higgsfield.message
 
 
 def test_external_health_hides_provider_error_details() -> None:

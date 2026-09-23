@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from contextlib import contextmanager
 import pytest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from scripts.gerador_midia import gerar_video_higgsfield
+from scripts.higgsfield_api import HiggsfieldRequestStatus, HiggsfieldStatusSnapshot
 from scripts.integration_errors import IntegrationFailure
 from webapp.video_generator import (
     VideoGenerator,
@@ -19,6 +21,31 @@ from webapp.video_generator import (
     OpenAISoraVideoGenerator,
     create_video_generator,
 )
+
+
+STATUS_URL = "https://platform.higgsfield.ai/requests/request-1/status"
+VIDEO_URL = "https://example.com/video.mp4"
+
+
+def _snapshot(status: HiggsfieldRequestStatus, **payload: object) -> HiggsfieldStatusSnapshot:
+    return HiggsfieldStatusSnapshot(status, status.value, {"status": status.value, **payload})
+
+
+def _write_download(command, **_kwargs):
+    Path(command[command.index("-o") + 1]).write_bytes(b"video")
+    return subprocess.CompletedProcess(command, 0)
+
+
+@contextmanager
+def _higgsfield_environment(client, fetch_status, *, dimensions):
+    with patch.dict(sys.modules, {"higgsfield_client": client}), patch(
+        "scripts.gerador_midia.fetch_request_status", fetch_status
+    ), patch(
+        "scripts.gerador_midia._subprocess_run", side_effect=_write_download
+    ), patch(
+        "scripts.gerador_midia._probe_video_dimensions", return_value=dimensions
+    ), patch("scripts.gerador_midia.time.sleep"):
+        yield
 
 
 class TestVideoGenerationRequest:
@@ -81,102 +108,45 @@ class TestHiggsfieldVideoGenerator:
         assert gen.health_check() is False
 
     def test_polling_network_error_reuses_submitted_request(self, tmp_path):
-        class Completed:
-            pass
-
-        class Failed:
-            pass
-
-        class NSFW:
-            pass
-
-        class Cancelled:
-            pass
-
-        class InProgress:
-            pass
-
-        controller = SimpleNamespace(request_id="request-1")
-        client = SimpleNamespace(
-            Completed=Completed,
-            Failed=Failed,
-            NSFW=NSFW,
-            Cancelled=Cancelled,
-            submit=MagicMock(return_value=controller),
-            status=MagicMock(
-                side_effect=[
-                    OSError("network is unreachable"),
-                    InProgress(),
-                    Completed(),
-                ]
-            ),
-            result=MagicMock(
-                return_value={"video": {"url": "https://example.com/video.mp4"}}
-            ),
+        controller = SimpleNamespace(request_id="request-1", status_url=STATUS_URL)
+        client = SimpleNamespace(submit=MagicMock(return_value=controller))
+        fetch_status = MagicMock(
+            side_effect=[
+                OSError("network is unreachable"),
+                _snapshot(HiggsfieldRequestStatus.IN_PROGRESS),
+                _snapshot(HiggsfieldRequestStatus.COMPLETED, video={"url": VIDEO_URL}),
+            ]
         )
-        output_path = tmp_path / "video.mp4"
 
-        def download(command, **_kwargs):
-            Path(command[command.index("-o") + 1]).write_bytes(b"video")
-            return subprocess.CompletedProcess(command, 0)
-
-        with patch.dict(sys.modules, {"higgsfield_client": client}), patch(
-            "scripts.gerador_midia._subprocess_run", side_effect=download
-        ), patch(
-            "scripts.gerador_midia._probe_video_dimensions",
-            return_value=(1080, 1920),
-        ), patch("scripts.gerador_midia.time.sleep"):
+        with _higgsfield_environment(client, fetch_status, dimensions=(1080, 1920)):
             result = gerar_video_higgsfield(
                 "kling-video/v2.1/master/text-to-video",
                 "A vertical commercial",
-                output_path=output_path,
+                output_path=tmp_path / "video.mp4",
                 max_retries=2,
                 raise_on_failure=True,
             )
 
-        assert result == output_path
+        assert result == tmp_path / "video.mp4"
         client.submit.assert_called_once()
         assert client.submit.call_args.kwargs["arguments"]["resolution"] == "1080p"
-        assert client.status.call_count == 3
-        client.result.assert_called_once_with("request-1")
+        assert fetch_status.call_count == 3
+        fetch_status.assert_called_with(STATUS_URL)
 
     def test_rejects_non_native_1080p_provider_output(self, tmp_path):
-        class Completed:
-            pass
-
-        class Failed:
-            pass
-
-        class NSFW:
-            pass
-
-        class Cancelled:
-            pass
-
         client = SimpleNamespace(
-            Completed=Completed,
-            Failed=Failed,
-            NSFW=NSFW,
-            Cancelled=Cancelled,
-            submit=MagicMock(return_value=SimpleNamespace(request_id="request-1")),
-            status=MagicMock(return_value=Completed()),
-            result=MagicMock(
-                return_value={"video": {"url": "https://example.com/video.mp4"}}
-            ),
+            submit=MagicMock(
+                return_value=SimpleNamespace(request_id="request-1", status_url=STATUS_URL)
+            )
+        )
+        fetch_status = MagicMock(
+            return_value=_snapshot(HiggsfieldRequestStatus.COMPLETED, video={"url": VIDEO_URL})
         )
         output_path = tmp_path / "video.mp4"
 
-        def download(command, **_kwargs):
-            Path(command[command.index("-o") + 1]).write_bytes(b"video")
-            return subprocess.CompletedProcess(command, 0)
-
-        with patch.dict(sys.modules, {"higgsfield_client": client}), patch(
-            "scripts.gerador_midia._subprocess_run",
-            side_effect=download,
-        ), patch(
-            "scripts.gerador_midia._probe_video_dimensions",
-            return_value=(720, 1280),
-        ), pytest.raises(IntegrationFailure) as captured:
+        with _higgsfield_environment(client, fetch_status, dimensions=(720, 1280)), pytest.raises(
+            IntegrationFailure
+        ) as captured:
             gerar_video_higgsfield(
                 "kling-video/v2.1/master/text-to-video",
                 "A vertical commercial",
@@ -188,6 +158,58 @@ class TestHiggsfieldVideoGenerator:
 
         assert captured.value.code == "native_resolution_mismatch"
         assert not output_path.exists()
+
+    def test_failed_render_keeps_provider_reason(self, tmp_path):
+        client = SimpleNamespace(
+            submit=MagicMock(
+                return_value=SimpleNamespace(request_id="request-1", status_url=STATUS_URL)
+            )
+        )
+        fetch_status = MagicMock(
+            return_value=_snapshot(
+                HiggsfieldRequestStatus.FAILED,
+                error="not_enough_credits",
+            )
+        )
+
+        with _higgsfield_environment(client, fetch_status, dimensions=(1080, 1920)), pytest.raises(
+            IntegrationFailure
+        ) as captured:
+            gerar_video_higgsfield(
+                "kling-video/v2.1/master/text-to-video",
+                "A vertical commercial",
+                output_path=tmp_path / "video.mp4",
+                max_retries=0,
+                raise_on_failure=True,
+            )
+
+        assert captured.value.code == "insufficient_credits"
+        assert captured.value.technical_message == "not_enough_credits"
+
+    def test_unknown_status_keeps_polling_until_terminal(self, tmp_path):
+        client = SimpleNamespace(
+            submit=MagicMock(
+                return_value=SimpleNamespace(request_id="request-1", status_url=STATUS_URL)
+            )
+        )
+        fetch_status = MagicMock(
+            side_effect=[
+                HiggsfieldStatusSnapshot(HiggsfieldRequestStatus.UNKNOWN, "rendering"),
+                _snapshot(HiggsfieldRequestStatus.COMPLETED, video={"url": VIDEO_URL}),
+            ]
+        )
+
+        with _higgsfield_environment(client, fetch_status, dimensions=(1080, 1920)):
+            result = gerar_video_higgsfield(
+                "kling-video/v2.1/master/text-to-video",
+                "A vertical commercial",
+                output_path=tmp_path / "video.mp4",
+                max_retries=0,
+                raise_on_failure=True,
+            )
+
+        assert result == tmp_path / "video.mp4"
+        assert fetch_status.call_count == 2
 
 
 class TestOpenAISoraVideoGenerator:

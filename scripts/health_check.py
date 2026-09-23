@@ -87,12 +87,18 @@ def check_configs():
 
 
 def check_higgsfield():
-    """5. Higgsfield credentials without a state-changing provider call."""
+    """5. Higgsfield credentials confirmed by an authenticated read that spends no credits."""
 
     credentials = (HF_API_KEY, HF_API_SECRET)
     if any(not value or value.startswith("your_") for value in credentials):
         return False, "Credenciais nao configuradas"
-    return True, "Credenciais configuradas; autenticacao sera confirmada no primeiro envio"
+
+    from scripts.higgsfield_api import HiggsfieldAuthOutcome, probe_higgsfield_auth
+
+    probe = probe_higgsfield_auth()
+    if probe.outcome is HiggsfieldAuthOutcome.AUTHENTICATED:
+        return True, "Autenticacao confirmada"
+    return False, f"Erro: {probe.detail}"
 
 
 def check_elevenlabs():
