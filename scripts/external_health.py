@@ -169,15 +169,15 @@ def probe_external_health(
     higgs_reason = None
     higgs_auth_confirmed = None
     if higgs_ok:
-        higgs_auth_confirmed = False
-        higgs_reason = "credentials_configured"
+        higgs_auth_confirmed = True
+        higgs_reason = "auth_confirmed"
     else:
         logger.warning("Higgsfield health check failed: %s", higgs_message)
         raw_message = higgs_message.split("Erro:", 1)[1].strip() if "Erro:" in higgs_message else higgs_message
         failure = classify_higgsfield_exception(RuntimeError(raw_message), stage="healthcheck")
         higgs_auth_confirmed = failure.auth_confirmed
         higgs_reason = failure.reason
-        higgs_message = "Higgsfield indisponivel; consulte os logs do servidor."
+        higgs_message = failure.user_message
 
     if not openai_ok:
         logger.warning("OpenAI health check failed: %s", openai_message)

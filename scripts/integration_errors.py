@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+
+import httpx
 
 
 @dataclass
@@ -52,15 +55,68 @@ def build_generic_failure(*, stage: str, exc: Exception) -> IntegrationFailure:
     )
 
 
+HIGGSFIELD_SERVICE = "higgsfield"
+HTTP_STATUS_PATTERN = re.compile(r"\bHTTP (\d{3})\b")
+AUTH_STATUS_CODES = frozenset({401, 403})
+PAYMENT_REQUIRED_STATUS_CODE = 402
+NOT_FOUND_STATUS_CODE = 404
+INVALID_ARGUMENTS_STATUS_CODES = frozenset({400, 422})
+RATE_LIMIT_STATUS_CODE = 429
+SERVER_ERROR_MIN_STATUS_CODE = 500
+CREDIT_MARKERS = ("credit", "saldo", "balance")
+NETWORK_MARKERS = ("connection", "10061", "network", "timeout", "timed out")
+
+
+def _higgsfield_failure(
+    *,
+    stage: str,
+    code: str,
+    user_message: str,
+    technical_message: str,
+    retryable: bool,
+    auth_confirmed: bool | None,
+    submit_confirmed: bool,
+) -> IntegrationFailure:
+    return IntegrationFailure(
+        service=HIGGSFIELD_SERVICE,
+        stage=stage,
+        code=code,
+        user_message=user_message,
+        technical_message=technical_message,
+        retryable=retryable,
+        auth_confirmed=auth_confirmed,
+        submit_confirmed=submit_confirmed,
+        render_confirmed=False,
+        reason=code,
+    )
+
+
+def _http_status_code(exc: Exception, message: str) -> int | None:
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    for candidate in (exc, exc.__cause__):
+        if isinstance(candidate, httpx.HTTPStatusError):
+            return candidate.response.status_code
+    match = HTTP_STATUS_PATTERN.search(message)
+    return int(match.group(1)) if match else None
+
+
+def _is_network_failure(exc: Exception, lowered: str) -> bool:
+    if isinstance(exc, (httpx.TransportError, OSError)):
+        return True
+    return any(marker in lowered for marker in NETWORK_MARKERS)
+
+
 def classify_higgsfield_exception(exc: Exception, *, stage: str = "generating") -> IntegrationFailure:
     """Map Higgsfield failures to a structured contract."""
 
     message = str(exc).strip() or exc.__class__.__name__
     lowered = message.lower()
+    status_code = _http_status_code(exc, message)
 
-    if "credit" in lowered or "saldo" in lowered or "insufficient" in lowered:
-        return IntegrationFailure(
-            service="higgsfield",
+    if status_code == PAYMENT_REQUIRED_STATUS_CODE or any(marker in lowered for marker in CREDIT_MARKERS):
+        return _higgsfield_failure(
             stage=stage,
             code="insufficient_credits",
             user_message="A conexão com a Higgsfield foi confirmada, mas a geração não pode prosseguir sem saldo.",
@@ -68,27 +124,12 @@ def classify_higgsfield_exception(exc: Exception, *, stage: str = "generating") 
             retryable=False,
             auth_confirmed=True,
             submit_confirmed=True,
-            render_confirmed=False,
-            reason="insufficient_credits",
         )
 
-    if "model not found" in lowered or ("model" in lowered and "not found" in lowered):
-        return IntegrationFailure(
-            service="higgsfield",
-            stage=stage,
-            code="model_not_found",
-            user_message="A Higgsfield respondeu, mas o modelo selecionado não foi encontrado para esta conta.",
-            technical_message=message,
-            retryable=False,
-            auth_confirmed=True,
-            submit_confirmed=True,
-            render_confirmed=False,
-            reason="model_not_found",
-        )
-
-    if "401" in lowered or "403" in lowered or "unauthorized" in lowered or "forbidden" in lowered:
-        return IntegrationFailure(
-            service="higgsfield",
+    if status_code in AUTH_STATUS_CODES or (
+        status_code is None and ("unauthorized" in lowered or "forbidden" in lowered)
+    ):
+        return _higgsfield_failure(
             stage=stage,
             code="auth_invalid",
             user_message="Falha de autenticação na Higgsfield. Verifique as credenciais configuradas.",
@@ -96,13 +137,56 @@ def classify_higgsfield_exception(exc: Exception, *, stage: str = "generating") 
             retryable=False,
             auth_confirmed=False,
             submit_confirmed=False,
-            render_confirmed=False,
-            reason="auth_invalid",
         )
 
-    if "connection" in lowered or "10061" in lowered or "network" in lowered or "timeout" in lowered:
-        return IntegrationFailure(
-            service="higgsfield",
+    if status_code == NOT_FOUND_STATUS_CODE or "model not found" in lowered or (
+        "model" in lowered and "not found" in lowered
+    ):
+        return _higgsfield_failure(
+            stage=stage,
+            code="model_not_found",
+            user_message="A Higgsfield respondeu, mas o modelo selecionado não foi encontrado para esta conta.",
+            technical_message=message,
+            retryable=False,
+            auth_confirmed=True,
+            submit_confirmed=True,
+        )
+
+    if status_code in INVALID_ARGUMENTS_STATUS_CODES:
+        return _higgsfield_failure(
+            stage=stage,
+            code="invalid_arguments",
+            user_message="A Higgsfield rejeitou os parâmetros enviados para o modelo selecionado.",
+            technical_message=message,
+            retryable=False,
+            auth_confirmed=True,
+            submit_confirmed=False,
+        )
+
+    if status_code == RATE_LIMIT_STATUS_CODE:
+        return _higgsfield_failure(
+            stage=stage,
+            code="rate_limited",
+            user_message="A Higgsfield limitou temporariamente as requisições. Tente novamente em instantes.",
+            technical_message=message,
+            retryable=True,
+            auth_confirmed=True,
+            submit_confirmed=False,
+        )
+
+    if status_code is not None and status_code >= SERVER_ERROR_MIN_STATUS_CODE:
+        return _higgsfield_failure(
+            stage=stage,
+            code="provider_unavailable",
+            user_message="A Higgsfield está instável no momento. Tente novamente em instantes.",
+            technical_message=message,
+            retryable=True,
+            auth_confirmed=None,
+            submit_confirmed=False,
+        )
+
+    if _is_network_failure(exc, lowered):
+        return _higgsfield_failure(
             stage=stage,
             code="network_error",
             user_message="Falha ao conectar na Higgsfield durante a geração. Verifique a conectividade externa.",
@@ -110,13 +194,10 @@ def classify_higgsfield_exception(exc: Exception, *, stage: str = "generating") 
             retryable=True,
             auth_confirmed=None,
             submit_confirmed=False,
-            render_confirmed=False,
-            reason="network_error",
         )
 
     if "output url" in lowered or "sem url" in lowered:
-        return IntegrationFailure(
-            service="higgsfield",
+        return _higgsfield_failure(
             stage=stage,
             code="missing_output_url",
             user_message="A Higgsfield concluiu a requisição, mas não devolveu uma URL válida de saída.",
@@ -124,12 +205,9 @@ def classify_higgsfield_exception(exc: Exception, *, stage: str = "generating") 
             retryable=True,
             auth_confirmed=True,
             submit_confirmed=True,
-            render_confirmed=False,
-            reason="missing_output_url",
         )
 
-    return IntegrationFailure(
-        service="higgsfield",
+    return _higgsfield_failure(
         stage=stage,
         code="generation_failed",
         user_message="A Higgsfield não conseguiu concluir a geração do vídeo.",
@@ -137,6 +215,4 @@ def classify_higgsfield_exception(exc: Exception, *, stage: str = "generating") 
         retryable=True,
         auth_confirmed=True,
         submit_confirmed=True,
-        render_confirmed=False,
-        reason="generation_failed",
     )

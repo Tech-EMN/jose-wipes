@@ -4,7 +4,6 @@ import os
 import sys
 import time
 import subprocess
-from collections.abc import Callable
 from pathlib import Path
 from datetime import datetime
 
@@ -12,6 +11,11 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.config import LOGS_DIR, OUTPUT_DIR, gerar_audio as _gerar_audio_config
 from scripts.integration_errors import IntegrationFailure, classify_higgsfield_exception
+from scripts.higgsfield_api import (
+    HiggsfieldRequestStatus,
+    HiggsfieldStatusSnapshot,
+    fetch_request_status,
+)
 
 # Flag do Windows para não abrir janela de console
 _NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -47,15 +51,14 @@ def log(msg):
         f.write(linha + "\n")
 
 
-def _read_higgsfield_request(
-    operation: Callable[[], object],
+def _read_higgsfield_status(
+    status_url: str,
     *,
     request_id: str,
-    operation_name: str,
-) -> object:
+) -> HiggsfieldStatusSnapshot:
     for attempt in range(1, _HIGGSFIELD_READ_RETRIES + 1):
         try:
-            return operation()
+            return fetch_request_status(status_url)
         except Exception as exc:
             failure = classify_higgsfield_exception(exc, stage="generating")
             if failure.code != "network_error" or attempt >= _HIGGSFIELD_READ_RETRIES:
@@ -65,7 +68,7 @@ def _read_higgsfield_request(
                     code=failure.code,
                     user_message=failure.user_message,
                     technical_message=(
-                        f"{operation_name} falhou para request_id={request_id}: "
+                        f"polling falhou para request_id={request_id}: "
                         f"{failure.technical_message}"
                     ),
                     retryable=failure.retryable,
@@ -76,7 +79,7 @@ def _read_higgsfield_request(
                 ) from exc
             delay = min(2 ** attempt, 10)
             log(
-                f"Falha de rede no {operation_name} do request {request_id}; "
+                f"Falha de rede no polling do request {request_id}; "
                 f"nova consulta em {delay}s"
             )
             time.sleep(delay)
@@ -85,22 +88,27 @@ def _read_higgsfield_request(
 
 
 def _poll_higgsfield_request(
-    client: object,
+    status_url: str,
     *,
     request_id: str,
-    terminal_types: tuple[type, ...],
-) -> object:
+) -> HiggsfieldStatusSnapshot:
     deadline = time.monotonic() + _HIGGSFIELD_POLL_TIMEOUT_SECONDS
+    reported_unknown_statuses: set[str] = set()
 
     while time.monotonic() < deadline:
-        status = _read_higgsfield_request(
-            lambda: client.status(request_id),
-            request_id=request_id,
-            operation_name="polling",
-        )
-        log(f"Status: {type(status).__name__}")
-        if isinstance(status, terminal_types):
-            return status
+        snapshot = _read_higgsfield_status(status_url, request_id=request_id)
+        log(f"Status: {snapshot.raw_status}")
+        if snapshot.is_terminal:
+            return snapshot
+        if (
+            snapshot.status is HiggsfieldRequestStatus.UNKNOWN
+            and snapshot.raw_status not in reported_unknown_statuses
+        ):
+            reported_unknown_statuses.add(snapshot.raw_status)
+            log(
+                f"Status desconhecido da Higgsfield '{snapshot.raw_status}' "
+                f"para request {request_id}; polling continua"
+            )
         time.sleep(_HIGGSFIELD_POLL_INTERVAL_SECONDS)
 
     raise IntegrationFailure(
@@ -144,8 +152,6 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
         log(f"Higgsfield submit: modelo={modelo}, dur={duracao}s")
 
         try:
-            from higgsfield_client import Cancelled, Completed, Failed, NSFW
-
             is_image_model = "seedream" in modelo or "text-to-image" in modelo or "soul" in modelo or "reve" in modelo
             is_i2v_model = "image-to-video" in modelo or "dop/" in modelo
             is_kling = "kling-video" in modelo
@@ -182,13 +188,12 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
 
             log(f"Request ID: {controller.request_id}")
 
-            status = _poll_higgsfield_request(
-                higgsfield_client,
+            snapshot = _poll_higgsfield_request(
+                controller.status_url,
                 request_id=controller.request_id,
-                terminal_types=(Completed, Failed, NSFW, Cancelled),
             )
 
-            if isinstance(status, NSFW):
+            if snapshot.status is HiggsfieldRequestStatus.NSFW:
                 log("NSFW detectado, retentando com prompt limpo...")
                 last_failure = IntegrationFailure(
                     service="higgsfield",
@@ -204,22 +209,21 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
                 )
                 continue
 
-            if isinstance(status, (Failed, Cancelled)):
-                log("Geração falhou")
-                error_msg = getattr(status, "message", None) or str(status)
+            if snapshot.status in (
+                HiggsfieldRequestStatus.FAILED,
+                HiggsfieldRequestStatus.CANCELED,
+            ):
+                failure_detail = snapshot.failure_detail()
+                log(f"Geração falhou [{snapshot.raw_status}]: {failure_detail}")
                 last_failure = classify_higgsfield_exception(
-                    RuntimeError(error_msg),
+                    RuntimeError(failure_detail),
                     stage="generating",
                 )
                 if last_failure.retryable:
                     continue
                 break
 
-            result = _read_higgsfield_request(
-                lambda: higgsfield_client.result(controller.request_id),
-                request_id=controller.request_id,
-                operation_name="resultado",
-            )
+            result = snapshot.payload
 
             # Extrair URL do resultado
             url = None
