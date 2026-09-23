@@ -307,6 +307,9 @@ function renderStatus(data) {
   if (data.failure_reason) {
     detailParts.push(`reason=${data.failure_reason}`);
   }
+  if (data.error_message && data.error_message !== data.user_message) {
+    detailParts.push(`detalhe=${data.error_message}`);
+  }
   jobErrorMeta.textContent = detailParts.join(" | ");
 
   if (data.status === "completed" && data.preview_url && data.download_url) {
