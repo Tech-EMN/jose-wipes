@@ -72,7 +72,7 @@ def test_failure_detail_falls_back_to_serialized_payload() -> None:
     ("status_code", "expected"),
     [
         (401, HiggsfieldAuthOutcome.UNAUTHORIZED),
-        (403, HiggsfieldAuthOutcome.UNAUTHORIZED),
+        (403, HiggsfieldAuthOutcome.AUTHENTICATED),
         (404, HiggsfieldAuthOutcome.AUTHENTICATED),
         (422, HiggsfieldAuthOutcome.AUTHENTICATED),
         (429, HiggsfieldAuthOutcome.UNAVAILABLE),
@@ -105,7 +105,9 @@ def test_auth_probe_reports_network_failure() -> None:
     ("error", "expected_code"),
     [
         (_sdk_error(401, "Invalid API key"), "auth_invalid"),
-        (_sdk_error(403, "not_enough_credits"), "insufficient_credits"),
+        (_sdk_error(403, "Forbidden"), "insufficient_credits"),
+        (_sdk_error(423, "Locked"), "model_blocked"),
+        (RuntimeError("model_blocked"), "model_blocked"),
         (_sdk_error(402, "Payment required"), "insufficient_credits"),
         (_sdk_error(404, "Not Found"), "model_not_found"),
         (_sdk_error(422, [{"loc": ["body", "reference_image_urls"], "msg": "Extra inputs are not permitted"}]), "invalid_arguments"),
@@ -143,3 +145,11 @@ def test_fetch_request_status_resolves_relative_status_url() -> None:
         fetch_request_status("/requests/request-1/status")
 
     assert get.call_args.args[0] == STATUS_URL
+
+
+def test_model_blocked_is_not_retried_with_same_input() -> None:
+    failure = classify_higgsfield_exception(RuntimeError("model_blocked"))
+
+    assert failure.retryable is False
+    assert failure.auth_confirmed is True
+    assert failure.technical_message == "model_blocked"

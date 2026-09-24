@@ -57,13 +57,15 @@ def build_generic_failure(*, stage: str, exc: Exception) -> IntegrationFailure:
 
 HIGGSFIELD_SERVICE = "higgsfield"
 HTTP_STATUS_PATTERN = re.compile(r"\bHTTP (\d{3})\b")
-AUTH_STATUS_CODES = frozenset({401, 403})
-PAYMENT_REQUIRED_STATUS_CODE = 402
+AUTH_STATUS_CODES = frozenset({401})
+INSUFFICIENT_CREDITS_STATUS_CODES = frozenset({402, 403})
+MODEL_BLOCKED_STATUS_CODE = 423
 NOT_FOUND_STATUS_CODE = 404
 INVALID_ARGUMENTS_STATUS_CODES = frozenset({400, 422})
 RATE_LIMIT_STATUS_CODE = 429
 SERVER_ERROR_MIN_STATUS_CODE = 500
 CREDIT_MARKERS = ("credit", "saldo", "balance")
+MODEL_BLOCKED_MARKERS = ("model_blocked", "model blocked")
 NETWORK_MARKERS = ("connection", "10061", "network", "timeout", "timed out")
 
 
@@ -115,7 +117,7 @@ def classify_higgsfield_exception(exc: Exception, *, stage: str = "generating") 
     lowered = message.lower()
     status_code = _http_status_code(exc, message)
 
-    if status_code == PAYMENT_REQUIRED_STATUS_CODE or any(marker in lowered for marker in CREDIT_MARKERS):
+    if status_code in INSUFFICIENT_CREDITS_STATUS_CODES or any(marker in lowered for marker in CREDIT_MARKERS):
         return _higgsfield_failure(
             stage=stage,
             code="insufficient_credits",
@@ -137,6 +139,21 @@ def classify_higgsfield_exception(exc: Exception, *, stage: str = "generating") 
             retryable=False,
             auth_confirmed=False,
             submit_confirmed=False,
+        )
+
+    if status_code == MODEL_BLOCKED_STATUS_CODE or any(marker in lowered for marker in MODEL_BLOCKED_MARKERS):
+        return _higgsfield_failure(
+            stage=stage,
+            code="model_blocked",
+            user_message=(
+                "A Higgsfield bloqueou a geração neste modelo. Isso costuma ocorrer quando o prompt "
+                "ou a imagem de referência contém marca, logo ou produto de marca, ou quando o "
+                "modelo está temporariamente bloqueado. Ajuste o prompt ou a referência, ou tente outro modelo."
+            ),
+            technical_message=message,
+            retryable=False,
+            auth_confirmed=True,
+            submit_confirmed=True,
         )
 
     if status_code == NOT_FOUND_STATUS_CODE or "model not found" in lowered or (
