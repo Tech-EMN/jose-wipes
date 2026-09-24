@@ -126,6 +126,13 @@ async def _read_upload_image(
     return data, upload.filename
 
 
+TRUTHY_FORM_VALUES = frozenset({"true", "1", "yes", "sim"})
+
+
+def _parse_form_bool(value: str) -> bool:
+    return value.strip().lower() in TRUTHY_FORM_VALUES
+
+
 @app.post("/api/jobs")
 async def create_job(
     resolution: str = Form(...),
@@ -134,6 +141,7 @@ async def create_job(
     prompt: str = Form(...),
     video_model: str = Form(...),
     apply_logo_overlay: str = Form(default="true"),
+    use_product_reference: str = Form(default="true"),
     script_pdf: UploadFile | None = File(default=None),
     ref_embalagem: UploadFile | None = File(default=None),
     ref_logo: UploadFile | None = File(default=None),
@@ -192,7 +200,8 @@ async def create_job(
         ref_logo_name=logo_name,
         ref_cores_bytes=cores_data,
         ref_cores_name=cores_name,
-        apply_logo_overlay=apply_logo_overlay.lower() in {"true", "1", "yes", "sim"},
+        apply_logo_overlay=_parse_form_bool(apply_logo_overlay),
+        use_product_reference=_parse_form_bool(use_product_reference),
     )
     status = job_manager.get_job_status(metadata["job_id"])
 

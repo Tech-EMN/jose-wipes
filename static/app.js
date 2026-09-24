@@ -416,6 +416,12 @@ form.addEventListener("submit", async (event) => {
   const logoCheck = document.getElementById("logo-overlay-check");
   formData.append("apply_logo_overlay", logoCheck && logoCheck.checked ? "true" : "false");
 
+  const productReferenceCheck = document.getElementById("product-reference-check");
+  formData.append(
+    "use_product_reference",
+    productReferenceCheck && !productReferenceCheck.checked ? "false" : "true",
+  );
+
   try {
     const response = await fetch("/api/jobs", {
       method: "POST",
