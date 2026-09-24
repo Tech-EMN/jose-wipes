@@ -76,6 +76,7 @@ class JobManager:
         ref_cores_bytes: bytes | None = None,
         ref_cores_name: str | None = None,
         apply_logo_overlay: bool = True,
+        use_product_reference: bool = True,
     ) -> dict[str, object]:
         """Persist a new job and enqueue it for processing."""
 
@@ -146,6 +147,7 @@ class JobManager:
             "ref_logo_path": ref_paths["logo"],
             "ref_cores_path": ref_paths["cores"],
             "apply_logo_overlay": apply_logo_overlay,
+            "use_product_reference": use_product_reference,
         }
 
         self._write_metadata(job_dir, metadata)
@@ -295,6 +297,7 @@ class JobManager:
                 ref_logo_path=metadata.get("ref_logo_path"),
                 ref_cores_path=metadata.get("ref_cores_path"),
                 apply_logo_overlay=metadata.get("apply_logo_overlay", True),
+                use_product_reference=metadata.get("use_product_reference", True),
             )
             warnings.extend(render_result.get("warnings", []))
 

@@ -187,6 +187,7 @@ def render_planned_video(
     ref_logo_path: str | None = None,
     ref_cores_path: str | None = None,
     apply_logo_overlay: bool = True,
+    use_product_reference: bool = True,
 ) -> dict[str, object]:
     """Generate all scenes for a job and compose the final video."""
 
@@ -209,7 +210,8 @@ def render_planned_video(
     reference_image_url = None
     reference_image_path = None
     shot_reference_flags = [
-        not shot.product_overlay.ativo
+        use_product_reference
+        and not shot.product_overlay.ativo
         and prompt_pede_referencia_produto(
             shot.visual_prompt_en,
             shot.narration_text_pt,

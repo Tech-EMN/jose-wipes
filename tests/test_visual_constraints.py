@@ -164,6 +164,56 @@ def test_product_overlay_replaces_generation_reference(tmp_path: Path) -> None:
     product_overlay_mock.assert_called_once()
 
 
+def test_disabled_product_reference_skips_upload_and_generation_reference(tmp_path: Path) -> None:
+    plan = PlannerOutput(
+        title="Jose Wipes",
+        enhanced_brief_pt="Produto em fundo branco.",
+        global_style="Minimalista.",
+        final_cta_pt="Jose Wipes.",
+        shots=[
+            PlannerShot(
+                shot_number=1,
+                visual_prompt_en="A white rectangular wet wipes package on a gym bench.",
+                notes="Mostrar o produto em destaque.",
+            )
+        ],
+    )
+
+    def generate(*_args: object, **kwargs: object) -> Path:
+        output_path = Path(str(kwargs["output_path"]))
+        output_path.write_bytes(b"video")
+        return output_path
+
+    final_path = tmp_path / "final.mp4"
+    final_path.write_bytes(b"final")
+
+    with patch(
+        "webapp.pipeline_service.obter_url_imagem_produto",
+        return_value="https://example.com/product.png",
+    ) as product_url_mock, patch(
+        "webapp.pipeline_service._gerar_video_com_fallback", side_effect=generate
+    ) as generate_mock, patch(
+        "webapp.pipeline_service.gerar_card_logo", return_value=final_path
+    ), patch(
+        "webapp.pipeline_service.compor_video_final", return_value=final_path
+    ), patch(
+        "webapp.pipeline_service.upload_para_drive",
+        return_value={"id": "drive-id", "link": "https://drive.example/video"},
+    ):
+        render_planned_video(
+            job_dir=tmp_path / "job",
+            request=_request("Mostre a embalagem."),
+            plan=plan,
+            model_config=get_model_config("kling_3_0"),
+            apply_logo_overlay=False,
+            use_product_reference=False,
+        )
+
+    assert generate_mock.call_args.kwargs["reference_image_url"] is None
+    assert generate_mock.call_args.kwargs["reference_image_path"] is None
+    product_url_mock.assert_not_called()
+
+
 def test_compositor_rejects_partial_normalization(tmp_path: Path) -> None:
     scene_paths = [tmp_path / "scene-1.mp4", tmp_path / "scene-2.mp4"]
     for scene_path in scene_paths:
