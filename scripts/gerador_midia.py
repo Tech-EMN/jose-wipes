@@ -31,6 +31,7 @@ _HIGGSFIELD_POLL_TIMEOUT_SECONDS = int(
     os.getenv("JW_HIGGSFIELD_POLL_TIMEOUT_SECONDS", "360")
 )
 _HIGGSFIELD_READ_RETRIES = int(os.getenv("JW_HIGGSFIELD_READ_RETRIES", "5"))
+KLING_V2_1_PREFIX = "kling-video/v2.1/"
 
 
 def _subprocess_run(cmd, **kwargs):
@@ -155,12 +156,15 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
             is_image_model = "seedream" in modelo or "text-to-image" in modelo or "soul" in modelo or "reve" in modelo
             is_i2v_model = "image-to-video" in modelo or "dop/" in modelo
             is_kling = "kling-video" in modelo
+            accepts_legacy_kling_arguments = modelo.startswith(KLING_V2_1_PREFIX)
 
             args = {"prompt": prompt_atual, "aspect_ratio": aspecto}
             if reference_image_url:
                 if is_i2v_model:
                     args["image_url"] = reference_image_url
                     log(f"Imagem de input injetada (image-to-video)")
+                elif is_kling and not accepts_legacy_kling_arguments:
+                    log(f"Referência visual ignorada: {modelo} não aceita reference_image_urls")
                 else:
                     args["reference_image_urls"] = [reference_image_url]
                     log(f"Referência visual do produto injetada")
@@ -171,7 +175,7 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
                 else:
                     args["resolution"] = resolucao
             else:
-                if is_kling:
+                if accepts_legacy_kling_arguments:
                     args["resolution"] = resolucao
                 # Kling models só aceitam duração 5 ou 10
                 if is_i2v_model or is_kling:

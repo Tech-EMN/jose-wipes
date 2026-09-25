@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 import httpx
+from higgsfield_client.http.client import BASE_URL as HIGGSFIELD_BASE_URL
 
-HIGGSFIELD_BASE_URL = "https://platform.higgsfield.ai"
 HIGGSFIELD_READ_TIMEOUT_SECONDS = 30.0
 HIGGSFIELD_AUTH_PROBE_TIMEOUT_SECONDS = 10.0
 HIGGSFIELD_AUTH_PROBE_REQUEST_ID = "00000000-0000-0000-0000-000000000000"
