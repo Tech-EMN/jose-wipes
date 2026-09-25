@@ -23,7 +23,7 @@ from webapp.video_generator import (
 )
 
 
-STATUS_URL = "https://platform.higgsfield.ai/requests/request-1/status"
+STATUS_URL = "https://api.higgsfield.ai/requests/request-1/status"
 VIDEO_URL = "https://example.com/video.mp4"
 
 
@@ -210,6 +210,46 @@ class TestHiggsfieldVideoGenerator:
 
         assert result == tmp_path / "video.mp4"
         assert fetch_status.call_count == 2
+
+
+    def test_kling_3_omits_arguments_the_model_does_not_accept(self, tmp_path):
+        client = SimpleNamespace(
+            submit=MagicMock(
+                return_value=SimpleNamespace(request_id="request-1", status_url=STATUS_URL)
+            )
+        )
+        fetch_status = MagicMock(
+            return_value=_snapshot(HiggsfieldRequestStatus.COMPLETED, video={"url": VIDEO_URL})
+        )
+
+        with _higgsfield_environment(client, fetch_status, dimensions=(1080, 1920)):
+            gerar_video_higgsfield(
+                "kling-video/v3.0/pro/text-to-video",
+                "A vertical commercial",
+                output_path=tmp_path / "video.mp4",
+                reference_image_url="https://example.com/product.png",
+                extra_arguments={"sound": "off"},
+                max_retries=0,
+                raise_on_failure=True,
+            )
+
+        arguments = client.submit.call_args.kwargs["arguments"]
+        assert client.submit.call_args.kwargs["application"] == "kling-video/v3.0/pro/text-to-video"
+        assert "resolution" not in arguments
+        assert "reference_image_urls" not in arguments
+        assert arguments["sound"] == "off"
+        assert arguments["duration"] == 5
+
+
+def test_realistic_tier_defaults_to_kling_3_pro_without_native_sound(monkeypatch):
+    import importlib
+    import webapp.model_registry as registry
+
+    monkeypatch.delenv("HF_MODEL_KLING_3_0", raising=False)
+    config = importlib.reload(registry).get_model_config("kling_3_0")
+
+    assert config.application == "kling-video/v3.0/pro/text-to-video"
+    assert config.default_arguments == {"sound": "off"}
 
 
 class TestOpenAISoraVideoGenerator:

@@ -27,12 +27,8 @@ def _env_or_default(name: str, fallback: str) -> str:
     return value or fallback
 
 
-# Único modelo confirmado como disponível nesta conta Higgsfield:
-#   kling-video/v2.1/master/text-to-video  (Kling 2.1 Master)
-# Atualizado após diagnóstico de 2026-07-16 (scripts/descobrir_modelos_higgsfield.py).
-# Use as env vars HF_MODEL_* para sobrescrever quando novos modelos forem contratados.
-
-_KW_2_1 = "kling-video/v2.1/master/text-to-video"
+KLING_3_0_PRO_APPLICATION = "kling-video/v3.0/pro/text-to-video"
+KLING_3_0_DEFAULT_ARGUMENTS: dict[str, object] = {"sound": "off"}
 
 VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
     "seedance_1_5_pro": VideoModelConfig(
@@ -50,17 +46,17 @@ VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
     ),
     "kling_3_0": VideoModelConfig(
         key="kling_3_0",
-        label="Kling 2.1 — Realista",
+        label="Kling 3.0 — Realista",
         tier="Realista",
         application=_env_or_default(
-            "HF_MODEL_KLING_3_0", _KW_2_1
+            "HF_MODEL_KLING_3_0", KLING_3_0_PRO_APPLICATION
         ),
         allowed_resolutions=("720p", "1080p"),
         fallback_application="",
-        default_arguments={},
+        default_arguments=KLING_3_0_DEFAULT_ARGUMENTS,
         fallback_note=(
-            "Sua conta atual só possui Kling 2.1. "
-            "Defina HF_MODEL_KLING_3_0 no .env quando contratar Kling 3.0."
+            "Kling 3.0 Pro via Higgsfield, sem áudio nativo (a narração vem do ElevenLabs). "
+            "Defina HF_MODEL_KLING_3_0 para usar outra variante, ex.: kling-video/v3.0/std/text-to-video."
         ),
     ),
     "veo_3_1": VideoModelConfig(

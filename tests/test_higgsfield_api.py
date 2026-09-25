@@ -13,7 +13,7 @@ from scripts.higgsfield_api import (
 )
 from scripts.integration_errors import classify_higgsfield_exception
 
-STATUS_URL = "https://platform.higgsfield.ai/requests/request-1/status"
+STATUS_URL = "https://api.higgsfield.ai/requests/request-1/status"
 
 
 def _response(status_code: int, payload: object) -> httpx.Response:
