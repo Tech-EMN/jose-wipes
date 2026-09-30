@@ -212,6 +212,54 @@ class TestHiggsfieldVideoGenerator:
         assert fetch_status.call_count == 2
 
 
+    @pytest.mark.parametrize(
+        ("application", "expected_arguments"),
+        [
+            (
+                "kling-video/v3.0/std/text-to-video",
+                {"prompt": "A vertical commercial", "aspect_ratio": "9:16", "duration": 6, "sound": "off"},
+            ),
+            (
+                "kling-video/v3.0/pro/text-to-video",
+                {"prompt": "A vertical commercial", "aspect_ratio": "9:16", "duration": 6, "sound": "off"},
+            ),
+            (
+                "alibaba/wan-3.0-prime/text-to-video",
+                {
+                    "prompt": "A vertical commercial",
+                    "aspect_ratio": "9:16",
+                    "duration": 6,
+                    "generate_audio": False,
+                    "resolution": "1080p",
+                },
+            ),
+        ],
+    )
+    def test_profiled_models_receive_exactly_their_arguments(
+        self, tmp_path, application, expected_arguments
+    ):
+        client = SimpleNamespace(
+            submit=MagicMock(
+                return_value=SimpleNamespace(request_id="request-1", status_url=STATUS_URL)
+            )
+        )
+        fetch_status = MagicMock(
+            return_value=_snapshot(HiggsfieldRequestStatus.COMPLETED, video={"url": VIDEO_URL})
+        )
+
+        with _higgsfield_environment(client, fetch_status, dimensions=(1080, 1920)):
+            gerar_video_higgsfield(
+                application,
+                "A vertical commercial",
+                output_path=tmp_path / "video.mp4",
+                reference_image_url="https://example.com/product.png",
+                max_retries=0,
+                raise_on_failure=True,
+            )
+
+        assert client.submit.call_args.kwargs["application"] == application
+        assert client.submit.call_args.kwargs["arguments"] == expected_arguments
+
     def test_kling_3_omits_arguments_the_model_does_not_accept(self, tmp_path):
         client = SimpleNamespace(
             submit=MagicMock(
@@ -228,7 +276,6 @@ class TestHiggsfieldVideoGenerator:
                 "A vertical commercial",
                 output_path=tmp_path / "video.mp4",
                 reference_image_url="https://example.com/product.png",
-                extra_arguments={"sound": "off"},
                 max_retries=0,
                 raise_on_failure=True,
             )
@@ -238,18 +285,20 @@ class TestHiggsfieldVideoGenerator:
         assert "resolution" not in arguments
         assert "reference_image_urls" not in arguments
         assert arguments["sound"] == "off"
-        assert arguments["duration"] == 5
+        assert arguments["duration"] == 6
 
 
 def test_realistic_tier_defaults_to_kling_3_pro_without_native_sound(monkeypatch):
     import importlib
     import webapp.model_registry as registry
+    from scripts.higgsfield_model_profiles import find_argument_profile
 
     monkeypatch.delenv("HF_MODEL_KLING_3_0", raising=False)
     config = importlib.reload(registry).get_model_config("kling_3_0")
 
     assert config.application == "kling-video/v3.0/pro/text-to-video"
-    assert config.default_arguments == {"sound": "off"}
+    assert config.default_arguments == {}
+    assert find_argument_profile(config.application).audio_off_arguments == {"sound": "off"}
 
 
 class TestOpenAISoraVideoGenerator:

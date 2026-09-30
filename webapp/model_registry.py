@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from scripts.higgsfield_model_profiles import KLING_3_0_PRO_APPLICATION
 from webapp.schemas import ResolutionLiteral, VideoModelLiteral
 
 
@@ -26,9 +27,6 @@ def _env_or_default(name: str, fallback: str) -> str:
     value = os.getenv(name, "").strip()
     return value or fallback
 
-
-KLING_3_0_PRO_APPLICATION = "kling-video/v3.0/pro/text-to-video"
-KLING_3_0_DEFAULT_ARGUMENTS: dict[str, object] = {"sound": "off"}
 
 VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
     "seedance_1_5_pro": VideoModelConfig(
@@ -53,7 +51,7 @@ VIDEO_MODEL_REGISTRY: dict[VideoModelLiteral, VideoModelConfig] = {
         ),
         allowed_resolutions=("720p", "1080p"),
         fallback_application="",
-        default_arguments=KLING_3_0_DEFAULT_ARGUMENTS,
+        default_arguments={},
         fallback_note=(
             "Kling 3.0 Pro via Higgsfield, sem áudio nativo (a narração vem do ElevenLabs). "
             "Defina HF_MODEL_KLING_3_0 para usar outra variante, ex.: kling-video/v3.0/std/text-to-video."
