@@ -287,6 +287,73 @@ class TestHiggsfieldVideoGenerator:
         assert arguments["duration"] == 6
 
 
+WAN_3_0_PRIME = "alibaba/wan-3.0-prime/text-to-video"
+
+
+def _generate_wan(tmp_path, *, aspect_ratio, resolution, dimensions):
+    client = SimpleNamespace(
+        submit=MagicMock(
+            return_value=SimpleNamespace(request_id="request-1", status_url=STATUS_URL)
+        )
+    )
+    fetch_status = MagicMock(
+        return_value=_snapshot(HiggsfieldRequestStatus.COMPLETED, video={"url": VIDEO_URL})
+    )
+    output_path = tmp_path / "video.mp4"
+
+    with _higgsfield_environment(client, fetch_status, dimensions=dimensions):
+        result = gerar_video_higgsfield(
+            WAN_3_0_PRIME,
+            "A vertical commercial",
+            aspecto=aspect_ratio,
+            resolucao=resolution,
+            output_path=output_path,
+            max_retries=0,
+            raise_on_failure=True,
+        )
+
+    return client.submit.call_args.kwargs["arguments"], result, output_path
+
+
+@pytest.mark.parametrize(
+    ("aspect_ratio", "dimensions"),
+    [("9:16", (1080, 1920)), ("16:9", (1920, 1080))],
+)
+def test_wan_native_1080p_output_is_accepted(tmp_path, aspect_ratio, dimensions):
+    arguments, result, output_path = _generate_wan(
+        tmp_path, aspect_ratio=aspect_ratio, resolution="1080p", dimensions=dimensions
+    )
+
+    assert arguments["resolution"] == "1080p"
+    assert arguments["aspect_ratio"] == aspect_ratio
+    assert result == output_path
+    assert output_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("aspect_ratio", "dimensions"),
+    [("9:16", (720, 1280)), ("16:9", (1280, 720)), ("9:16", (1920, 1080))],
+)
+def test_wan_non_native_1080p_output_is_rejected(tmp_path, aspect_ratio, dimensions):
+    with pytest.raises(IntegrationFailure) as captured:
+        _generate_wan(
+            tmp_path, aspect_ratio=aspect_ratio, resolution="1080p", dimensions=dimensions
+        )
+
+    assert captured.value.code == "native_resolution_mismatch"
+    assert captured.value.retryable is False
+    assert not (tmp_path / "video.mp4").exists()
+
+
+def test_wan_720p_request_sends_720p_without_native_check(tmp_path):
+    arguments, result, output_path = _generate_wan(
+        tmp_path, aspect_ratio="9:16", resolution="720p", dimensions=(720, 1280)
+    )
+
+    assert arguments["resolution"] == "720p"
+    assert result == output_path
+
+
 def test_realistic_tier_defaults_to_kling_3_pro_without_native_sound(monkeypatch):
     import importlib
     import webapp.model_registry as registry
