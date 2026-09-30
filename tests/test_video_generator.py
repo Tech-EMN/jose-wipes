@@ -18,7 +18,6 @@ from webapp.video_generator import (
     VideoGenerationRequest,
     VideoGenerationResult,
     HiggsfieldVideoGenerator,
-    OpenAISoraVideoGenerator,
     create_video_generator,
 )
 
@@ -212,6 +211,54 @@ class TestHiggsfieldVideoGenerator:
         assert fetch_status.call_count == 2
 
 
+    @pytest.mark.parametrize(
+        ("application", "expected_arguments"),
+        [
+            (
+                "kling-video/v3.0/std/text-to-video",
+                {"prompt": "A vertical commercial", "aspect_ratio": "9:16", "duration": 6, "sound": "off"},
+            ),
+            (
+                "kling-video/v3.0/pro/text-to-video",
+                {"prompt": "A vertical commercial", "aspect_ratio": "9:16", "duration": 6, "sound": "off"},
+            ),
+            (
+                "alibaba/wan-3.0-prime/text-to-video",
+                {
+                    "prompt": "A vertical commercial",
+                    "aspect_ratio": "9:16",
+                    "duration": 6,
+                    "generate_audio": False,
+                    "resolution": "1080p",
+                },
+            ),
+        ],
+    )
+    def test_profiled_models_receive_exactly_their_arguments(
+        self, tmp_path, application, expected_arguments
+    ):
+        client = SimpleNamespace(
+            submit=MagicMock(
+                return_value=SimpleNamespace(request_id="request-1", status_url=STATUS_URL)
+            )
+        )
+        fetch_status = MagicMock(
+            return_value=_snapshot(HiggsfieldRequestStatus.COMPLETED, video={"url": VIDEO_URL})
+        )
+
+        with _higgsfield_environment(client, fetch_status, dimensions=(1080, 1920)):
+            gerar_video_higgsfield(
+                application,
+                "A vertical commercial",
+                output_path=tmp_path / "video.mp4",
+                reference_image_url="https://example.com/product.png",
+                max_retries=0,
+                raise_on_failure=True,
+            )
+
+        assert client.submit.call_args.kwargs["application"] == application
+        assert client.submit.call_args.kwargs["arguments"] == expected_arguments
+
     def test_kling_3_omits_arguments_the_model_does_not_accept(self, tmp_path):
         client = SimpleNamespace(
             submit=MagicMock(
@@ -228,7 +275,6 @@ class TestHiggsfieldVideoGenerator:
                 "A vertical commercial",
                 output_path=tmp_path / "video.mp4",
                 reference_image_url="https://example.com/product.png",
-                extra_arguments={"sound": "off"},
                 max_retries=0,
                 raise_on_failure=True,
             )
@@ -238,102 +284,87 @@ class TestHiggsfieldVideoGenerator:
         assert "resolution" not in arguments
         assert "reference_image_urls" not in arguments
         assert arguments["sound"] == "off"
-        assert arguments["duration"] == 5
+        assert arguments["duration"] == 6
+
+
+WAN_3_0_PRIME = "alibaba/wan-3.0-prime/text-to-video"
+
+
+def _generate_wan(tmp_path, *, aspect_ratio, resolution, dimensions):
+    client = SimpleNamespace(
+        submit=MagicMock(
+            return_value=SimpleNamespace(request_id="request-1", status_url=STATUS_URL)
+        )
+    )
+    fetch_status = MagicMock(
+        return_value=_snapshot(HiggsfieldRequestStatus.COMPLETED, video={"url": VIDEO_URL})
+    )
+    output_path = tmp_path / "video.mp4"
+
+    with _higgsfield_environment(client, fetch_status, dimensions=dimensions):
+        result = gerar_video_higgsfield(
+            WAN_3_0_PRIME,
+            "A vertical commercial",
+            aspecto=aspect_ratio,
+            resolucao=resolution,
+            output_path=output_path,
+            max_retries=0,
+            raise_on_failure=True,
+        )
+
+    return client.submit.call_args.kwargs["arguments"], result, output_path
+
+
+@pytest.mark.parametrize(
+    ("aspect_ratio", "dimensions"),
+    [("9:16", (1080, 1920)), ("16:9", (1920, 1080))],
+)
+def test_wan_native_1080p_output_is_accepted(tmp_path, aspect_ratio, dimensions):
+    arguments, result, output_path = _generate_wan(
+        tmp_path, aspect_ratio=aspect_ratio, resolution="1080p", dimensions=dimensions
+    )
+
+    assert arguments["resolution"] == "1080p"
+    assert arguments["aspect_ratio"] == aspect_ratio
+    assert result == output_path
+    assert output_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("aspect_ratio", "dimensions"),
+    [("9:16", (720, 1280)), ("16:9", (1280, 720)), ("9:16", (1920, 1080))],
+)
+def test_wan_non_native_1080p_output_is_rejected(tmp_path, aspect_ratio, dimensions):
+    with pytest.raises(IntegrationFailure) as captured:
+        _generate_wan(
+            tmp_path, aspect_ratio=aspect_ratio, resolution="1080p", dimensions=dimensions
+        )
+
+    assert captured.value.code == "native_resolution_mismatch"
+    assert captured.value.retryable is False
+    assert not (tmp_path / "video.mp4").exists()
+
+
+def test_wan_720p_request_sends_720p_without_native_check(tmp_path):
+    arguments, result, output_path = _generate_wan(
+        tmp_path, aspect_ratio="9:16", resolution="720p", dimensions=(720, 1280)
+    )
+
+    assert arguments["resolution"] == "720p"
+    assert result == output_path
 
 
 def test_realistic_tier_defaults_to_kling_3_pro_without_native_sound(monkeypatch):
     import importlib
     import webapp.model_registry as registry
+    from scripts.higgsfield_model_profiles import find_argument_profile
 
     monkeypatch.delenv("HF_MODEL_KLING_3_0", raising=False)
     config = importlib.reload(registry).get_model_config("kling_3_0")
 
     assert config.application == "kling-video/v3.0/pro/text-to-video"
-    assert config.default_arguments == {"sound": "off"}
-
-
-class TestOpenAISoraVideoGenerator:
-    def test_sora_pro_requests_native_vertical_1080p(self, tmp_path):
-        output_path = tmp_path / "video.mp4"
-        client = MagicMock()
-        client.videos.create_and_poll.return_value.id = "video-id"
-        client.videos.download_content.return_value.write_to_file.side_effect = (
-            lambda path: Path(path).write_bytes(b"video")
-        )
-
-        with patch("scripts.config.OPENAI_API_KEY", "test-key"), patch(
-            "openai.OpenAI", return_value=client
-        ):
-            OpenAISoraVideoGenerator("sora-2-pro").generate(
-                VideoGenerationRequest(
-                    prompt="test prompt",
-                    aspect_ratio="9:16",
-                    resolution="1080p",
-                    duration_seconds=4,
-                    output_path=output_path,
-                )
-            )
-
-        assert client.videos.create_and_poll.call_args.kwargs["size"] == "1080x1920"
-
-    def test_uses_local_reference_and_writes_download(self, tmp_path):
-        reference_path = tmp_path / "reference.png"
-        reference_path.write_bytes(b"image")
-        output_path = tmp_path / "video.mp4"
-        client = MagicMock()
-        client.videos.create_and_poll.return_value.id = "video-id"
-        client.videos.download_content.return_value.write_to_file.side_effect = (
-            lambda path: Path(path).write_bytes(b"video")
-        )
-
-        with patch("scripts.config.OPENAI_API_KEY", "test-key"), patch(
-            "openai.OpenAI", return_value=client
-        ), patch(
-            "webapp.video_generator._prepare_sora_reference",
-            return_value=reference_path,
-        ):
-            result = OpenAISoraVideoGenerator("sora-2").generate(
-                VideoGenerationRequest(
-                    prompt="test prompt",
-                    aspect_ratio="9:16",
-                    resolution="720p",
-                    duration_seconds=5,
-                    output_path=output_path,
-                    reference_image_path=reference_path,
-                )
-            )
-
-        assert result.output_path.read_bytes() == b"video"
-        assert client.videos.create_and_poll.call_args.kwargs["seconds"] == "4"
-        assert client.videos.create_and_poll.call_args.kwargs["input_reference"] == reference_path
-        client.videos.download_content.return_value.write_to_file.assert_called_once_with(output_path)
-
-    def test_reports_moderation_failure_before_download(self, tmp_path):
-        client = MagicMock()
-        video = client.videos.create_and_poll.return_value
-        video.id = "video-id"
-        video.status = "failed"
-        video.error.code = "moderation_blocked"
-        video.error.message = "Your request was blocked by our moderation system."
-
-        with patch("scripts.config.OPENAI_API_KEY", "test-key"), patch(
-            "openai.OpenAI", return_value=client
-        ), pytest.raises(IntegrationFailure) as captured:
-            OpenAISoraVideoGenerator("sora-2").generate(
-                VideoGenerationRequest(
-                    prompt="neutral studio background",
-                    aspect_ratio="9:16",
-                    resolution="720p",
-                    duration_seconds=5,
-                    output_path=tmp_path / "video.mp4",
-                )
-            )
-
-        assert captured.value.code == "sora_moderation_blocked"
-        assert captured.value.retryable is False
-        assert captured.value.submit_confirmed is True
-        assert captured.value.render_confirmed is False
-        client.videos.download_content.assert_not_called()
+    assert config.default_arguments == {}
+    assert find_argument_profile(config.application).audio_off_arguments == {"sound": "off"}
 
 
 class TestCreateVideoGenerator:
@@ -348,6 +379,14 @@ class TestCreateVideoGenerator:
             extra_arguments={"num_inference_steps": 50},
         )
         assert gen._extra_arguments == {"num_inference_steps": 50}
+
+    @pytest.mark.parametrize("application", ["openai:sora-2", "openai:sora-2-pro"])
+    def test_factory_rejects_discontinued_sora(self, application):
+        with pytest.raises(IntegrationFailure) as captured:
+            create_video_generator(application)
+
+        assert captured.value.code == "provider_discontinued"
+        assert captured.value.retryable is False
 
 
 class TestVideoGeneratorWithMock:

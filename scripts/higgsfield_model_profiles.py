@@ -1,0 +1,76 @@
+"""Request arguments accepted by each Higgsfield text-to-video model."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
+
+KLING_3_0_STD_APPLICATION = "kling-video/v3.0/std/text-to-video"
+KLING_3_0_PRO_APPLICATION = "kling-video/v3.0/pro/text-to-video"
+WAN_3_0_PRIME_APPLICATION = "alibaba/wan-3.0-prime/text-to-video"
+
+
+@dataclass(frozen=True)
+class ModelArgumentProfile:
+    min_duration_seconds: int
+    max_duration_seconds: int
+    audio_off_arguments: Mapping[str, object]
+    sends_resolution: bool = False
+    accepts_reference_image: bool = False
+
+    def __post_init__(self) -> None:
+        if self.min_duration_seconds < 1:
+            raise ValueError("min_duration_seconds must be positive")
+        if self.min_duration_seconds > self.max_duration_seconds:
+            raise ValueError("min_duration_seconds must not exceed max_duration_seconds")
+
+    def clamp_duration(self, seconds: int) -> int:
+        return max(self.min_duration_seconds, min(seconds, self.max_duration_seconds))
+
+    def build_arguments(
+        self,
+        *,
+        prompt: str,
+        aspect_ratio: str,
+        resolution: str,
+        duration_seconds: int,
+        reference_image_url: str | None,
+    ) -> dict[str, object]:
+        arguments: dict[str, object] = {
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+            "duration": self.clamp_duration(duration_seconds),
+            **self.audio_off_arguments,
+        }
+        if self.sends_resolution:
+            arguments["resolution"] = resolution
+        if self.accepts_reference_image and reference_image_url:
+            arguments["reference_image_urls"] = [reference_image_url]
+        return arguments
+
+
+KLING_3_0_PROFILE = ModelArgumentProfile(
+    min_duration_seconds=3,
+    max_duration_seconds=15,
+    audio_off_arguments=MappingProxyType({"sound": "off"}),
+)
+
+WAN_3_0_PRIME_PROFILE = ModelArgumentProfile(
+    min_duration_seconds=2,
+    max_duration_seconds=30,
+    audio_off_arguments=MappingProxyType({"generate_audio": False}),
+    sends_resolution=True,
+)
+
+MODEL_ARGUMENT_PROFILES: Mapping[str, ModelArgumentProfile] = MappingProxyType(
+    {
+        KLING_3_0_STD_APPLICATION: KLING_3_0_PROFILE,
+        KLING_3_0_PRO_APPLICATION: KLING_3_0_PROFILE,
+        WAN_3_0_PRIME_APPLICATION: WAN_3_0_PRIME_PROFILE,
+    }
+)
+
+
+def find_argument_profile(application: str) -> ModelArgumentProfile | None:
+    return MODEL_ARGUMENT_PROFILES.get(application)

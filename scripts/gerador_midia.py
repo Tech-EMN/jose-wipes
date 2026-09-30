@@ -11,6 +11,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.config import LOGS_DIR, OUTPUT_DIR, gerar_audio as _gerar_audio_config
 from scripts.integration_errors import IntegrationFailure, classify_higgsfield_exception
+from scripts.higgsfield_model_profiles import find_argument_profile
 from scripts.higgsfield_api import (
     HiggsfieldRequestStatus,
     HiggsfieldStatusSnapshot,
@@ -31,7 +32,11 @@ _HIGGSFIELD_POLL_TIMEOUT_SECONDS = int(
     os.getenv("JW_HIGGSFIELD_POLL_TIMEOUT_SECONDS", "360")
 )
 _HIGGSFIELD_READ_RETRIES = int(os.getenv("JW_HIGGSFIELD_READ_RETRIES", "5"))
-KLING_V2_1_PREFIX = "kling-video/v2.1/"
+SEEDREAM_RESOLUTION = "4K"
+IMAGE_MODEL_MARKERS = ("seedream", "text-to-image", "soul", "reve")
+LEGACY_KLING_SHORT_DURATION = 5
+LEGACY_KLING_LONG_DURATION = 10
+LEGACY_KLING_SHORT_MAX = 7
 
 
 def _subprocess_run(cmd, **kwargs):
@@ -129,6 +134,59 @@ def _poll_higgsfield_request(
     )
 
 
+def _is_image_model(modelo):
+    return any(marker in modelo for marker in IMAGE_MODEL_MARKERS)
+
+
+def _build_legacy_arguments(modelo, prompt, *, aspecto, resolucao, duracao, reference_image_url):
+    is_image_model = _is_image_model(modelo)
+    is_i2v_model = "image-to-video" in modelo or "dop/" in modelo
+    is_kling = "kling-video" in modelo
+
+    args = {"prompt": prompt, "aspect_ratio": aspecto}
+    if reference_image_url:
+        if is_i2v_model:
+            args["image_url"] = reference_image_url
+            log("Imagem de input injetada (image-to-video)")
+        else:
+            args["reference_image_urls"] = [reference_image_url]
+            log("Referência visual do produto injetada")
+
+    if is_image_model:
+        args["resolution"] = SEEDREAM_RESOLUTION if "seedream" in modelo else resolucao
+        return args
+
+    if is_kling:
+        args["resolution"] = resolucao
+    if is_i2v_model or is_kling:
+        duracao = LEGACY_KLING_SHORT_DURATION if duracao <= LEGACY_KLING_SHORT_MAX else LEGACY_KLING_LONG_DURATION
+    args["duration"] = duracao
+    return args
+
+
+def _build_higgsfield_arguments(modelo, prompt, *, aspecto, resolucao, duracao, reference_image_url):
+    profile = find_argument_profile(modelo)
+    if profile is None:
+        return _build_legacy_arguments(
+            modelo,
+            prompt,
+            aspecto=aspecto,
+            resolucao=resolucao,
+            duracao=duracao,
+            reference_image_url=reference_image_url,
+        )
+
+    if reference_image_url and not profile.accepts_reference_image:
+        log(f"Referência visual ignorada: {modelo} não aceita reference_image_urls")
+    return profile.build_arguments(
+        prompt=prompt,
+        aspect_ratio=aspecto,
+        resolution=resolucao,
+        duration_seconds=duracao,
+        reference_image_url=reference_image_url,
+    )
+
+
 def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
                             duracao=6, output_path=None, max_retries=2,
                             reference_image_url=None, extra_arguments=None,
@@ -137,8 +195,7 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
     import higgsfield_client
 
     if output_path is None:
-        is_image = "seedream" in modelo or "text-to-image" in modelo or "soul" in modelo or "reve" in modelo
-        ext = ".png" if is_image else ".mp4"
+        ext = ".png" if _is_image_model(modelo) else ".mp4"
         output_path = OUTPUT_DIR / "cenas" / f"hf_{int(time.time())}{ext}"
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -153,34 +210,14 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
         log(f"Higgsfield submit: modelo={modelo}, dur={duracao}s")
 
         try:
-            is_image_model = "seedream" in modelo or "text-to-image" in modelo or "soul" in modelo or "reve" in modelo
-            is_i2v_model = "image-to-video" in modelo or "dop/" in modelo
-            is_kling = "kling-video" in modelo
-            accepts_legacy_kling_arguments = modelo.startswith(KLING_V2_1_PREFIX)
-
-            args = {"prompt": prompt_atual, "aspect_ratio": aspecto}
-            if reference_image_url:
-                if is_i2v_model:
-                    args["image_url"] = reference_image_url
-                    log(f"Imagem de input injetada (image-to-video)")
-                elif is_kling and not accepts_legacy_kling_arguments:
-                    log(f"Referência visual ignorada: {modelo} não aceita reference_image_urls")
-                else:
-                    args["reference_image_urls"] = [reference_image_url]
-                    log(f"Referência visual do produto injetada")
-            if is_image_model:
-                # Seedream V4 só aceita 2K ou 4K
-                if "seedream" in modelo:
-                    args["resolution"] = "4K"
-                else:
-                    args["resolution"] = resolucao
-            else:
-                if accepts_legacy_kling_arguments:
-                    args["resolution"] = resolucao
-                # Kling models só aceitam duração 5 ou 10
-                if is_i2v_model or is_kling:
-                    duracao = 5 if duracao <= 7 else 10
-                args["duration"] = duracao
+            args = _build_higgsfield_arguments(
+                modelo,
+                prompt_atual,
+                aspecto=aspecto,
+                resolucao=resolucao,
+                duracao=duracao,
+                reference_image_url=reference_image_url,
+            )
 
             if extra_arguments:
                 args.update(extra_arguments)
@@ -267,7 +304,7 @@ def gerar_video_higgsfield(modelo, prompt, aspecto="9:16", resolucao="1080p",
                     and output_path.exists()
                     and output_path.stat().st_size > 0
                 ):
-                    if not is_image_model and resolucao == "1080p":
+                    if not _is_image_model(modelo) and resolucao == "1080p":
                         expected_dimensions = (
                             (1080, 1920) if aspecto == "9:16" else (1920, 1080)
                         )

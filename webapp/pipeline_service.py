@@ -55,6 +55,11 @@ def _required_step_failure(
     )
 
 
+FALLBACK_ELIGIBLE_FAILURE_CODES = frozenset(
+    {"model_blocked", "model_not_found", "provider_unavailable"}
+)
+
+
 def _gerar_video_com_fallback(
     model_config: VideoModelConfig,
     prompt: str,
@@ -64,7 +69,6 @@ def _gerar_video_com_fallback(
     duracao: int,
     output_path: str,
     reference_image_url: str | None,
-    reference_image_path: Path | None,
     extra_arguments: dict,
 ) -> "Path | None":
     """Generate video with automatic fallback using VideoGenerator interface."""
@@ -94,16 +98,16 @@ def _gerar_video_com_fallback(
                 duration_seconds=duracao,
                 output_path=Path(output_path),
                 reference_image_url=reference_image_url,
-                reference_image_path=reference_image_path,
             )
             result = generator.generate(request)
             return result.output_path
         except IntegrationFailure as exc:
             last_exc = exc
-            if app != applications[-1]:
+            if app != applications[-1] and exc.code in FALLBACK_ELIGIBLE_FAILURE_CODES:
                 _log.warning(
-                    "Modelo '%s' falhou; tentando fallback '%s'.",
+                    "Modelo '%s' falhou (%s); tentando fallback '%s'.",
                     app,
+                    exc.code,
                     applications[applications.index(app) + 1],
                 )
                 continue
@@ -208,7 +212,6 @@ def render_planned_video(
     # Determine which reference image to use for product shots
     # Priority: user-uploaded embalagem > default product image
     reference_image_url = None
-    reference_image_path = None
     shot_reference_flags = [
         use_product_reference
         and not shot.product_overlay.ativo
@@ -223,7 +226,6 @@ def render_planned_video(
 
     if any(shot_reference_flags):
         if ref_embalagem_path:
-            reference_image_path = Path(ref_embalagem_path)
             # Upload user-provided packaging image
             if progress_cb:
                 progress_cb("uploading_ref", "Enviando imagem da embalagem como referência...")
@@ -237,9 +239,6 @@ def render_planned_video(
                 except Exception as exc:
                     warnings.append(f"Referência visual do produto indisponível: {exc}")
         else:
-            default_product = obter_path_imagem_produto()
-            if default_product and Path(default_product).exists():
-                reference_image_path = Path(default_product)
             try:
                 reference_image_url = obter_url_imagem_produto()
             except Exception as exc:
@@ -276,7 +275,6 @@ def render_planned_video(
             duracao=shot.duration_seconds,
             output_path=f"{base_path}.mp4",
             reference_image_url=reference_image_url if should_use_reference else None,
-            reference_image_path=reference_image_path if should_use_reference else None,
             extra_arguments=model_config.default_arguments,
         )
         if not video_path:
