@@ -2,6 +2,7 @@ import pytest
 
 from scripts.higgsfield_model_profiles import (
     KLING_3_0_PRO_APPLICATION,
+    KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION,
     KLING_3_0_STD_APPLICATION,
     WAN_3_0_PRIME_APPLICATION,
     ModelArgumentProfile,
@@ -91,3 +92,12 @@ def test_invalid_duration_range_is_rejected(minimum: int, maximum: int) -> None:
             max_duration_seconds=maximum,
             audio_off_arguments={},
         )
+
+
+def test_kling_3_image_to_video_sends_input_image_without_aspect_ratio() -> None:
+    assert _arguments(KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION) == {
+        "prompt": "A man in a gym locker room.",
+        "duration": 5,
+        "sound": "off",
+        "image_url": REFERENCE_URL,
+    }

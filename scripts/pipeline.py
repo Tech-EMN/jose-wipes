@@ -22,6 +22,7 @@ from scripts.product_reference import (
     aplicar_regra_referencia_produto_plano,
     scene_dict_pede_referencia_produto,
 )
+from scripts.higgsfield_model_profiles import KLING_3_0_PRO_APPLICATION
 from scripts.gerador_midia import (
     gerar_video_higgsfield, gerar_audio_elevenlabs,
     combinar_video_audio, imagem_para_video_kenburns
@@ -93,7 +94,7 @@ def executar_pipeline(briefing=None, plano=None):
         numero = cena.get("numero", i)
         titulo_cena = cena.get("titulo", f"Cena {numero}")
         tipo = cena.get("tipo", "broll")
-        modelo = cena.get("modelo", "kling-video/v2.1/master/text-to-video")
+        modelo = cena.get("modelo", KLING_3_0_PRO_APPLICATION)
         prompt = cena.get("prompt", "")
         duracao = cena.get("duracao_segundos", 6)
         aspecto = cena.get("aspecto", "9:16")
