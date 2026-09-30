@@ -1,5 +1,8 @@
 import json
+import re
 from pathlib import Path
+
+import pytest
 
 from scripts.higgsfield_model_profiles import (
     KLING_3_0_PRO_APPLICATION,
@@ -10,6 +13,12 @@ from scripts.system_prompt import BLOCO_GUARDRAILS, BLOCO_MODELOS
 
 PROJECT_ROOT = Path(__file__).parent.parent
 DISCONTINUED_KLING_PREFIX = "kling-video/v2.1/"
+DISCONTINUED_MODEL_MARKERS = (
+    DISCONTINUED_KLING_PREFIX,
+    "bytedance/seedream/v4/",
+    "bytedance/seedance/v1/",
+)
+PROMPT_MODEL_PATTERN = re.compile(r'(?:"modelo(?:_imagem)?": "|\| )([a-z0-9-]+/[a-z0-9./-]+)')
 
 
 def test_cli_planner_prompt_only_recommends_current_kling_models() -> None:
@@ -35,3 +44,18 @@ def test_e2e_fixture_scenes_use_profiled_models() -> None:
 
     for scene in plan["cenas"]:
         assert find_argument_profile(scene["modelo"]) is not None, scene["modelo"]
+
+
+@pytest.mark.parametrize("marker", DISCONTINUED_MODEL_MARKERS)
+def test_cli_planner_prompt_drops_discontinued_models(marker: str) -> None:
+    source = (PROJECT_ROOT / "scripts/system_prompt.py").read_text(encoding="utf-8")
+
+    assert marker not in source
+
+
+def test_every_model_in_cli_planner_prompt_has_an_argument_profile() -> None:
+    source = (PROJECT_ROOT / "scripts/system_prompt.py").read_text(encoding="utf-8")
+    models = set(PROMPT_MODEL_PATTERN.findall(source))
+
+    assert models
+    assert sorted(model for model in models if find_argument_profile(model) is None) == []

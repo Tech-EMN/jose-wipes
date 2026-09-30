@@ -60,18 +60,17 @@ BLOCO_MODELOS = """
 | Modelo | Tier | Quando usar |
 |--------|------|-------------|
 | kling-video/v3.0/pro/text-to-video | PRO | DEFAULT — máxima qualidade, usar SEMPRE |
-| bytedance/seedance/v1/pro/text-to-video | Pro | Fallback se master falhar |
+| alibaba/wan-3.0-prime/text-to-video | Prime | Fallback se o Kling falhar |
 
 ### Image-to-Video (animar imagem — REQUER gerar imagem antes)
 | Modelo | Tier | Quando usar |
 |--------|------|-------------|
 | kling-video/v3.0/pro/image-to-video | PRO | DEFAULT — melhor animação disponível |
-| bytedance/seedance/v1/pro/image-to-video | Pro | Alternativa profissional |
 
 ### Text-to-Image (gerar imagem estática)
 | Modelo | Tier | Quando usar |
 |--------|------|-------------|
-| bytedance/seedream/v4/text-to-image | Premium | DEFAULT — melhor qualidade de imagem |
+| higgsfield-ai/soul/v2/standard | Premium | DEFAULT — melhor qualidade de imagem |
 | higgsfield-ai/soul/standard | Alta | Fallback alternativo |
 
 ### Áudio
@@ -81,11 +80,11 @@ BLOCO_MODELOS = """
 
 ## REGRAS DE ESCOLHA:
 1. Cena visual pura → tipo="broll" → modelo="kling-video/v3.0/pro/text-to-video" + audio overlay ElevenLabs se precisar narração
-2. Produto em close → tipo="product_shot" → modelo="bytedance/seedream/v4/text-to-image" (imagem) → pipeline faz Ken Burns automaticamente
+2. Produto em close → tipo="product_shot" → modelo="higgsfield-ai/soul/v2/standard" (imagem) → pipeline faz Ken Burns automaticamente
 3. Narração voz off → qualquer tipo + audio overlay ElevenLabs
 4. NÃO inclua card_final. O vídeo termina na última cena com a tagline narrada. Sem tela de produto no final — isso quebra o clima de trailer
 5. NÃO existe lip_sync na plataforma. Para cenas com fala, use tipo="broll" com audio overlay ElevenLabs
-6. Para máximo realismo: gere imagem com "bytedance/seedream/v4/text-to-image" e use tipo="image_to_video" com modelo "kling-video/v3.0/pro/image-to-video" para animar
+6. Para máximo realismo: gere imagem com "higgsfield-ai/soul/v2/standard" e use tipo="image_to_video" com modelo "kling-video/v3.0/pro/image-to-video" para animar
 
 ### Overlay do Produto Real
 
@@ -178,7 +177,7 @@ OUTPUT:
       "numero": 1,
       "titulo": "A Confissão",
       "tipo": "broll",
-      "modelo": "bytedance/seedance/v1/pro/text-to-video",
+      "modelo": "kling-video/v3.0/pro/text-to-video",
       "prompt": "A nervous middle-aged Brazilian man in his 40s wearing a wrinkled dress shirt slowly stands up from a metal folding chair in a dimly lit support group meeting room. Beads of sweat visible on his forehead, hands trembling slightly. Circle of men seated around him. Warm desaturated color grading with teal and orange tones, handheld camera with subtle movement, cinematic 35mm film look. Moody side lighting creates dramatic shadows. 9:16 portrait format",
       "duracao_segundos": 10,
       "aspecto": "9:16",
@@ -191,7 +190,7 @@ OUTPUT:
       "numero": 2,
       "titulo": "O Choque",
       "tipo": "broll",
-      "modelo": "bytedance/seedance/v1/pro/text-to-video",
+      "modelo": "kling-video/v3.0/pro/text-to-video",
       "prompt": "Cinematic montage of close-up reaction shots of men in a dimly lit support group room. One man drops jaw in disbelief, another slowly shakes head in denial with closed eyes, a third covers mouth with both hands. Each face dramatically lit from the side with warm tungsten light, deep shadows. Desaturated color palette with teal undertones. Shallow depth of field. Handheld camera with micro movements. Film grain. 9:16 portrait format",
       "duracao_segundos": 8,
       "aspecto": "9:16",
@@ -205,18 +204,18 @@ OUTPUT:
       "titulo": "A Revelação",
       "tipo": "image_to_video",
       "modelo": "kling-video/v3.0/pro/image-to-video",
-      "modelo_imagem": "higgsfield-ai/soul/standard",
+      "modelo_imagem": "higgsfield-ai/soul/v2/standard",
       "prompt": "A serene distinguished man in his late 40s wearing a dark suit stands up confidently and walks toward a nervous younger man in a dimly lit support group room. He places his hand on the younger man's shoulder and reaches into his blazer pocket pulling out a white rectangular package. Warm cinematic lighting with golden key light, deep shadows, desaturated teal and orange grading. Slow dolly movement. 35mm film look. 9:16 portrait format",
       "duracao_segundos": 8,
       "aspecto": "9:16",
       "resolucao": "1080p",
       "audio": {"tipo": "overlay", "persona_voz": "lider", "texto_fala": "A culpa não é sua. Existe um caminho.", "notas_audio": "voz calma, firme"},
       "texto_overlay": {"texto": null, "posicao": null, "momento": null},
-      "notas_producao": "Imagem gerada com soul/standard, animada com kling pro para máximo realismo."
+      "notas_producao": "Imagem gerada com Soul 2, animada com Kling 3.0 Pro para máximo realismo."
     }
   ],
   "card_final": {
-    "modelo": "higgsfield-ai/soul/standard",
+    "modelo": "higgsfield-ai/soul/v2/standard",
     "prompt": "White wet wipes package with bold black typography and shield logo centered on pure black background. Single dramatic spotlight from above creating pool of light. Subtle reflection on glossy black surface. Premium product hero shot. 9:16 portrait format",
     "duracao_segundos": 4,
     "audio": {"tipo": "overlay", "persona_voz": "narrador", "texto_fala": "José Wipes. A recuperação que você merece."},
@@ -241,7 +240,7 @@ BLOCO_GUARDRAILS = """
 4. SEMPRE terminar prompt com "9:16 portrait format" ou "9:16 vertical format"
 5. NUNCA conteúdo explícito, nudez, uso real do produto
 6. NUNCA incluir nome "José Wipes" dentro do prompt (IA erra texto renderizado)
-7. Descrever produto como "white wet wipes package with bold black typography and shield logo"
+7. Descrever produto só como "a white rectangular wet wipes package", sem texto, logo ou escudo — a marca real entra pelo produto_overlay
 8. SEMPRE especificar idade, tipo físico, roupa, expressão facial dos personagens
 9. SEMPRE especificar tipo de câmera e lens (35mm, handheld, etc.)
 10. Texto de fala (texto_fala) SEMPRE em português
@@ -254,10 +253,9 @@ BLOCO_GUARDRAILS = """
 17. Se briefing não especifica plataforma: usar todas (instagram_reels, tiktok, youtube_shorts)
 18. Cena com diálogo/narração → tipo="broll" → modelo="kling-video/v3.0/pro/text-to-video" + audio overlay ElevenLabs
 19. Cena sem fala → tipo="broll" → modelo="kling-video/v3.0/pro/text-to-video"
-20. Para máximo realismo → tipo="image_to_video" → gerar imagem com "bytedance/seedream/v4/text-to-image" e animar com "kling-video/v3.0/pro/image-to-video"
+20. Para máximo realismo → tipo="image_to_video" → gerar imagem com "higgsfield-ai/soul/v2/standard" e animar com "kling-video/v3.0/pro/image-to-video"
 21. Produto em destaque → tipo="product_shot" → modelo depende de animação necessária
-21. Em cenas com o produto, use 'the reference product package' no prompt — a imagem real é injetada automaticamente como referência
-22. Em product shots, SEMPRE incluir no prompt: 'matching the reference image exactly' para forçar consistência
+22. Os modelos atuais NÃO recebem a embalagem como imagem de referência. Para o produto aparecer fiel, use "produto_overlay"
 """
 
 

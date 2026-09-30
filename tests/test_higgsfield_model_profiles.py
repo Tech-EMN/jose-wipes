@@ -4,6 +4,8 @@ from scripts.higgsfield_model_profiles import (
     KLING_3_0_PRO_APPLICATION,
     KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION,
     KLING_3_0_STD_APPLICATION,
+    SOUL_2_APPLICATION,
+    SOUL_STANDARD_APPLICATION,
     WAN_3_0_PRIME_APPLICATION,
     ModelArgumentProfile,
     find_argument_profile,
@@ -100,4 +102,17 @@ def test_kling_3_image_to_video_sends_input_image_without_aspect_ratio() -> None
         "duration": 5,
         "sound": "off",
         "image_url": REFERENCE_URL,
+    }
+
+
+@pytest.mark.parametrize("application", [SOUL_2_APPLICATION, SOUL_STANDARD_APPLICATION])
+def test_soul_image_models_send_only_supported_fields(application: str) -> None:
+    profile = find_argument_profile(application)
+
+    assert profile is not None
+    assert profile.uses_image is False
+    assert _arguments(application) == {
+        "prompt": "A man in a gym locker room.",
+        "aspect_ratio": "9:16",
+        "resolution": "1080p",
     }

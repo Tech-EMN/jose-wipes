@@ -232,6 +232,10 @@ class TestHiggsfieldVideoGenerator:
                     "resolution": "1080p",
                 },
             ),
+            (
+                "higgsfield-ai/soul/v2/standard",
+                {"prompt": "A vertical commercial", "aspect_ratio": "9:16", "resolution": "1080p"},
+            ),
         ],
     )
     def test_profiled_models_receive_exactly_their_arguments(
