@@ -54,18 +54,18 @@ Seja CRIATIVO. Cada vídeo deve ter uma tagline única, com peso de frase de tra
 
 # ========== BLOCO 3 — MODELOS DISPONÍVEIS ==========
 BLOCO_MODELOS = """
-## MODELOS DE IA DISPONÍVEIS — USE SEMPRE OS MELHORES (MASTER/PRO)
+## MODELOS DE IA DISPONÍVEIS — USE SEMPRE OS MELHORES (PRO)
 
 ### Text-to-Video (gerar vídeo a partir de texto)
 | Modelo | Tier | Quando usar |
 |--------|------|-------------|
-| kling-video/v2.1/master/text-to-video | MASTER | DEFAULT — máxima qualidade, usar SEMPRE |
+| kling-video/v3.0/pro/text-to-video | PRO | DEFAULT — máxima qualidade, usar SEMPRE |
 | bytedance/seedance/v1/pro/text-to-video | Pro | Fallback se master falhar |
 
 ### Image-to-Video (animar imagem — REQUER gerar imagem antes)
 | Modelo | Tier | Quando usar |
 |--------|------|-------------|
-| kling-video/v2.1/master/image-to-video | MASTER | DEFAULT — melhor animação disponível |
+| kling-video/v3.0/pro/image-to-video | PRO | DEFAULT — melhor animação disponível |
 | bytedance/seedance/v1/pro/image-to-video | Pro | Alternativa profissional |
 
 ### Text-to-Image (gerar imagem estática)
@@ -80,12 +80,12 @@ BLOCO_MODELOS = """
 | ElevenLabs | Narração overlay com voz clonada sobre vídeo |
 
 ## REGRAS DE ESCOLHA:
-1. Cena visual pura → tipo="broll" → modelo="kling-video/v2.1/master/text-to-video" + audio overlay ElevenLabs se precisar narração
+1. Cena visual pura → tipo="broll" → modelo="kling-video/v3.0/pro/text-to-video" + audio overlay ElevenLabs se precisar narração
 2. Produto em close → tipo="product_shot" → modelo="bytedance/seedream/v4/text-to-image" (imagem) → pipeline faz Ken Burns automaticamente
 3. Narração voz off → qualquer tipo + audio overlay ElevenLabs
 4. NÃO inclua card_final. O vídeo termina na última cena com a tagline narrada. Sem tela de produto no final — isso quebra o clima de trailer
 5. NÃO existe lip_sync na plataforma. Para cenas com fala, use tipo="broll" com audio overlay ElevenLabs
-6. Para máximo realismo: gere imagem com "bytedance/seedream/v4/text-to-image" e use tipo="image_to_video" com modelo "kling-video/v2.1/master/image-to-video" para animar
+6. Para máximo realismo: gere imagem com "bytedance/seedream/v4/text-to-image" e use tipo="image_to_video" com modelo "kling-video/v3.0/pro/image-to-video" para animar
 
 ### Overlay do Produto Real
 
@@ -204,7 +204,7 @@ OUTPUT:
       "numero": 3,
       "titulo": "A Revelação",
       "tipo": "image_to_video",
-      "modelo": "kling-video/v2.1/pro/image-to-video",
+      "modelo": "kling-video/v3.0/pro/image-to-video",
       "modelo_imagem": "higgsfield-ai/soul/standard",
       "prompt": "A serene distinguished man in his late 40s wearing a dark suit stands up confidently and walks toward a nervous younger man in a dimly lit support group room. He places his hand on the younger man's shoulder and reaches into his blazer pocket pulling out a white rectangular package. Warm cinematic lighting with golden key light, deep shadows, desaturated teal and orange grading. Slow dolly movement. 35mm film look. 9:16 portrait format",
       "duracao_segundos": 8,
@@ -252,9 +252,9 @@ BLOCO_GUARDRAILS = """
 15. Se briefing não especifica formato: usar "grupo_de_apoio" como default
 16. Se briefing não especifica duração: usar 30 segundos como default
 17. Se briefing não especifica plataforma: usar todas (instagram_reels, tiktok, youtube_shorts)
-18. Cena com diálogo/narração → tipo="broll" → modelo="kling-video/v2.1/master/text-to-video" + audio overlay ElevenLabs
-19. Cena sem fala → tipo="broll" → modelo="kling-video/v2.1/master/text-to-video"
-20. Para máximo realismo → tipo="image_to_video" → gerar imagem com "bytedance/seedream/v4/text-to-image" e animar com "kling-video/v2.1/master/image-to-video"
+18. Cena com diálogo/narração → tipo="broll" → modelo="kling-video/v3.0/pro/text-to-video" + audio overlay ElevenLabs
+19. Cena sem fala → tipo="broll" → modelo="kling-video/v3.0/pro/text-to-video"
+20. Para máximo realismo → tipo="image_to_video" → gerar imagem com "bytedance/seedream/v4/text-to-image" e animar com "kling-video/v3.0/pro/image-to-video"
 21. Produto em destaque → tipo="product_shot" → modelo depende de animação necessária
 21. Em cenas com o produto, use 'the reference product package' no prompt — a imagem real é injetada automaticamente como referência
 22. Em product shots, SEMPRE incluir no prompt: 'matching the reference image exactly' para forçar consistência

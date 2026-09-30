@@ -176,7 +176,7 @@ def _build_higgsfield_arguments(modelo, prompt, *, aspecto, resolucao, duracao, 
             reference_image_url=reference_image_url,
         )
 
-    if reference_image_url and not profile.accepts_reference_image:
+    if reference_image_url and not profile.uses_image:
         log(f"Referência visual ignorada: {modelo} não aceita reference_image_urls")
     return profile.build_arguments(
         prompt=prompt,

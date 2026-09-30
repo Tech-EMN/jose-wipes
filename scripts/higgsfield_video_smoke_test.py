@@ -11,6 +11,7 @@ from pathlib import Path
 import httpx
 
 from scripts.config import HF_API_KEY, HF_API_SECRET, OUTPUT_DIR, obter_url_imagem_produto
+from scripts.higgsfield_model_profiles import KLING_3_0_PRO_APPLICATION
 from scripts.integration_errors import classify_higgsfield_exception
 from scripts.product_reference import prompt_pede_referencia_produto
 
@@ -18,7 +19,7 @@ from scripts.product_reference import prompt_pede_referencia_produto
 PRIMARY_MODEL = "google/veo/3.1"
 PRIMARY_MODEL_LEGACY = "google/veo/v3.1/text-to-video"
 FALLBACK_MODEL = "kling/3.0"
-FALLBACK_MODEL_LEGACY = "kling-video/v2.1/master/text-to-video"
+FALLBACK_MODEL_LEGACY = KLING_3_0_PRO_APPLICATION
 THIRD_MODEL = "bytedance/seedance/pro"
 THIRD_MODEL_LEGACY = "bytedance/seedance/v1/pro/text-to-video"
 SMOKE_TEST_MODELS = (

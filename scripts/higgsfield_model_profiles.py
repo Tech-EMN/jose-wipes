@@ -8,6 +8,7 @@ from types import MappingProxyType
 
 KLING_3_0_STD_APPLICATION = "kling-video/v3.0/std/text-to-video"
 KLING_3_0_PRO_APPLICATION = "kling-video/v3.0/pro/text-to-video"
+KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION = "kling-video/v3.0/pro/image-to-video"
 WAN_3_0_PRIME_APPLICATION = "alibaba/wan-3.0-prime/text-to-video"
 
 
@@ -17,13 +18,19 @@ class ModelArgumentProfile:
     max_duration_seconds: int
     audio_off_arguments: Mapping[str, object]
     sends_resolution: bool = False
+    sends_aspect_ratio: bool = True
     accepts_reference_image: bool = False
+    input_image_argument: str | None = None
 
     def __post_init__(self) -> None:
         if self.min_duration_seconds < 1:
             raise ValueError("min_duration_seconds must be positive")
         if self.min_duration_seconds > self.max_duration_seconds:
             raise ValueError("min_duration_seconds must not exceed max_duration_seconds")
+
+    @property
+    def uses_image(self) -> bool:
+        return self.accepts_reference_image or self.input_image_argument is not None
 
     def clamp_duration(self, seconds: int) -> int:
         return max(self.min_duration_seconds, min(seconds, self.max_duration_seconds))
@@ -39,13 +46,18 @@ class ModelArgumentProfile:
     ) -> dict[str, object]:
         arguments: dict[str, object] = {
             "prompt": prompt,
-            "aspect_ratio": aspect_ratio,
             "duration": self.clamp_duration(duration_seconds),
             **self.audio_off_arguments,
         }
+        if self.sends_aspect_ratio:
+            arguments["aspect_ratio"] = aspect_ratio
         if self.sends_resolution:
             arguments["resolution"] = resolution
-        if self.accepts_reference_image and reference_image_url:
+        if not reference_image_url:
+            return arguments
+        if self.input_image_argument is not None:
+            arguments[self.input_image_argument] = reference_image_url
+        elif self.accepts_reference_image:
             arguments["reference_image_urls"] = [reference_image_url]
         return arguments
 
@@ -54,6 +66,14 @@ KLING_3_0_PROFILE = ModelArgumentProfile(
     min_duration_seconds=3,
     max_duration_seconds=15,
     audio_off_arguments=MappingProxyType({"sound": "off"}),
+)
+
+KLING_3_0_IMAGE_TO_VIDEO_PROFILE = ModelArgumentProfile(
+    min_duration_seconds=3,
+    max_duration_seconds=15,
+    audio_off_arguments=MappingProxyType({"sound": "off"}),
+    sends_aspect_ratio=False,
+    input_image_argument="image_url",
 )
 
 WAN_3_0_PRIME_PROFILE = ModelArgumentProfile(
@@ -67,6 +87,7 @@ MODEL_ARGUMENT_PROFILES: Mapping[str, ModelArgumentProfile] = MappingProxyType(
     {
         KLING_3_0_STD_APPLICATION: KLING_3_0_PROFILE,
         KLING_3_0_PRO_APPLICATION: KLING_3_0_PROFILE,
+        KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION: KLING_3_0_IMAGE_TO_VIDEO_PROFILE,
         WAN_3_0_PRIME_APPLICATION: WAN_3_0_PRIME_PROFILE,
     }
 )
