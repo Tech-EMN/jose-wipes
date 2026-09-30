@@ -37,7 +37,7 @@ def _request(prompt: str) -> CreateJobRequest:
         orientation="vertical",
         duration_seconds=10,
         prompt=prompt,
-        video_model="sora_2",
+        video_model="kling_3_0",
     )
 
 
@@ -84,7 +84,7 @@ def test_planner_honors_no_text_brief() -> None:
         "webapp.planner.create_text_response",
         return_value=json.dumps(_planner_payload()),
     ):
-        plan = plan_web_video(request, "", get_model_config("sora_2"))
+        plan = plan_web_video(request, "", get_model_config("kling_3_0"))
 
     assert all(shot.overlay_text is None for shot in plan.shots)
     assert all(shot.narration_text_pt == "" for shot in plan.shots)
@@ -154,11 +154,10 @@ def test_product_overlay_replaces_generation_reference(tmp_path: Path) -> None:
             job_dir=tmp_path / "job",
             request=_request("Mostre a embalagem."),
             plan=plan,
-            model_config=get_model_config("sora_2"),
+            model_config=get_model_config("kling_3_0"),
             apply_logo_overlay=False,
         )
 
-    assert generate_mock.call_args.kwargs["reference_image_path"] is None
     assert generate_mock.call_args.kwargs["reference_image_url"] is None
     product_url_mock.assert_not_called()
     product_overlay_mock.assert_called_once()
@@ -210,7 +209,6 @@ def test_disabled_product_reference_skips_upload_and_generation_reference(tmp_pa
         )
 
     assert generate_mock.call_args.kwargs["reference_image_url"] is None
-    assert generate_mock.call_args.kwargs["reference_image_path"] is None
     product_url_mock.assert_not_called()
 
 
@@ -306,7 +304,7 @@ def test_render_respects_drive_delivery_policy(
             job_dir=tmp_path / "job",
             request=_request("Crie uma cena institucional sem narração."),
             plan=plan,
-            model_config=get_model_config("sora_2"),
+            model_config=get_model_config("kling_3_0"),
             apply_logo_overlay=False,
         )
 

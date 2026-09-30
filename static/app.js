@@ -36,11 +36,9 @@ const REF_TYPES = ["embalagem", "logo", "cores"];
 
 /* ===== MODEL HINTS ===== */
 const MODEL_HINTS = {
-  seedance_1_5_pro: "Sora-2 Padrão: text-to-video via OpenAI. Suporta 4/8/12s. Chave OPENAI_API_KEY necessária.",
+  seedance_1_5_pro: "Kling 3.0 Std Padrão: via Higgsfield. Bom custo-benefício para produção em escala.",
   kling_3_0: "Kling 3.0 Realista: via Higgsfield. Modelo para cenas com personagens.",
-  veo_3_1: "Sora-2-Pro Profissional: qualidade máxima OpenAI. Ideal para product shots e cenas finais.",
-  sora_2: "Sora-2 Padrão: via OpenAI. Bom custo-benefício para produção em escala.",
-  sora_2_pro: "Sora-2-Pro Profissional: via OpenAI. Qualidade premium para entregas comerciais.",
+  veo_3_1: "Wan 3.0 Prime Profissional: via Higgsfield, 1080p nativo. Ideal para entregas comerciais.",
 };
 
 if (modelSelect) {

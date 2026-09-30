@@ -101,7 +101,6 @@ def _generate_with(generators: dict[str, MagicMock], tmp_path: Path):
             duracao=5,
             output_path=str(tmp_path / "video.mp4"),
             reference_image_url=None,
-            reference_image_path=None,
             extra_arguments={},
         )
 

@@ -18,7 +18,7 @@ from scripts.health_check import (
     check_openai,
 )
 from scripts.integration_errors import classify_higgsfield_exception
-from webapp.model_registry import get_model_config
+from webapp.model_registry import VIDEO_MODEL_REGISTRY
 from webapp.schemas import ExternalHealthResponse, ExternalServiceHealth
 
 logger = logging.getLogger(__name__)
@@ -65,10 +65,7 @@ def _is_higgsfield_job(metadata: dict[str, object]) -> bool:
     if not isinstance(model_key, str):
         return metadata.get("failed_service") == "higgsfield"
 
-    try:
-        return not get_model_config(model_key).application.startswith("openai:")
-    except ValueError:
-        return metadata.get("failed_service") == "higgsfield"
+    return model_key in VIDEO_MODEL_REGISTRY or metadata.get("failed_service") == "higgsfield"
 
 
 def _latest_higgsfield_credit_failure(
