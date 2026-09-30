@@ -55,6 +55,11 @@ def _required_step_failure(
     )
 
 
+FALLBACK_ELIGIBLE_FAILURE_CODES = frozenset(
+    {"model_blocked", "model_not_found", "provider_unavailable"}
+)
+
+
 def _gerar_video_com_fallback(
     model_config: VideoModelConfig,
     prompt: str,
@@ -100,10 +105,11 @@ def _gerar_video_com_fallback(
             return result.output_path
         except IntegrationFailure as exc:
             last_exc = exc
-            if app != applications[-1]:
+            if app != applications[-1] and exc.code in FALLBACK_ELIGIBLE_FAILURE_CODES:
                 _log.warning(
-                    "Modelo '%s' falhou; tentando fallback '%s'.",
+                    "Modelo '%s' falhou (%s); tentando fallback '%s'.",
                     app,
+                    exc.code,
                     applications[applications.index(app) + 1],
                 )
                 continue
