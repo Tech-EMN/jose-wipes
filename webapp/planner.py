@@ -23,11 +23,13 @@ from scripts.product_reference import (
     prompt_pede_referencia_produto,
 )
 from webapp.model_registry import VideoModelConfig
+from webapp.narration_plan import BRAND_CARD_DURATION_SECONDS, NARRATION_TAIL_SECONDS
 from webapp.schemas import CreateJobRequest, PlannerOutput, PlannerShot, ProductOverlayConfig
 
 
 PLANNER_MODEL = OPENAI_PLANNER_MODEL
 SHOT_BLOCK_SECONDS = 5
+MIN_SHOT_COUNT = 2
 ALLOWED_PRODUCT_POSITIONS = {"centro", "centro_inferior", "direita", "esquerda"}
 NO_TEXT_PATTERNS = (
     re.compile(r"\bsem\s+(?:qualquer\s+)?textos?\b", re.IGNORECASE),
@@ -93,11 +95,9 @@ COMPOSITING_CAMERA_MOTION_KEYWORDS = (
     "zoom",
 )
 
-# Palavras por segundo confortáveis para o ElevenLabs multilingual em pt-BR
-# considerando pausas dramáticas — ~2.0 wps mantém a fala dentro do shot.
 NARRATION_WORDS_PER_SECOND = 2.0
-# Reservamos 0.6s no fim do shot pra evitar corte de áudio mesmo com pad.
-NARRATION_TAIL_RESERVE_SECONDS = 0.6
+SHOT_ROUNDING_SECONDS = 0.5
+MIN_NARRATION_WORD_BUDGET = 5
 # Quando há personagem com gesto/embalagem na mão, atrasamos o overlay.
 PRODUCT_OVERLAY_HAND_DELAY_SECONDS = 2.0
 PRODUCT_OVERLAY_MIN_PCT = 45
@@ -145,8 +145,18 @@ def _voice_catalog_text() -> str:
     return "\n".join(linhas) or "- narrador: voz padrao institucional"
 
 
+def _content_seconds(duration_seconds: int) -> int:
+    return duration_seconds - BRAND_CARD_DURATION_SECONDS
+
+
 def _expected_shot_count(duration_seconds: int) -> int:
-    return duration_seconds // SHOT_BLOCK_SECONDS
+    return max(MIN_SHOT_COUNT, _content_seconds(duration_seconds) // SHOT_BLOCK_SECONDS)
+
+
+def _narration_word_budget(duration_seconds: int) -> int:
+    shot_overhead = NARRATION_TAIL_SECONDS + SHOT_ROUNDING_SECONDS
+    speakable = _content_seconds(duration_seconds) - _expected_shot_count(duration_seconds) * shot_overhead
+    return max(MIN_NARRATION_WORD_BUDGET, math.floor(speakable * NARRATION_WORDS_PER_SECOND))
 
 
 def _briefing_proibe_texto(*texts: str | None) -> bool:
@@ -260,15 +270,11 @@ def _planner_system_prompt(*, orientation: str = "vertical") -> str:
         "shot on Arri Alexa, anamorphic bokeh, dramatic rim lighting, "
         "film grain, shallow depth of field"
     )
-    max_words = _max_narration_words(SHOT_BLOCK_SECONDS)
-
     return template.format(
         aspect_label=aspect_label,
         aspect_ratio=aspect_ratio,
         composition_hint=composition_hint,
         aspect_tail=aspect_tail,
-        shot_duration=SHOT_BLOCK_SECONDS,
-        max_words=max_words,
     )
 
 
@@ -282,31 +288,6 @@ def _prompt_content_hash() -> str:
         return "unknown"
 
     return hashlib.sha256(prompt_path.read_bytes()).hexdigest()[:12]
-
-
-def _max_narration_words(shot_duration_seconds: int) -> int:
-    """Maximo de palavras que cabem confortavelmente no shot considerando reserva no fim."""
-    speakable = max(1.0, shot_duration_seconds - NARRATION_TAIL_RESERVE_SECONDS)
-    return max(3, int(speakable * NARRATION_WORDS_PER_SECOND))
-
-
-def _trim_narration_to_fit(text: str, shot_duration_seconds: int) -> str:
-    """Garante que a narracao caiba no shot. Corta em fronteira de palavra/pontuacao."""
-    if not text:
-        return text
-    words = text.split()
-    limit = _max_narration_words(shot_duration_seconds)
-    if len(words) <= limit:
-        return text
-    trimmed = words[:limit]
-    # Tenta terminar em pontuacao para nao soar truncado
-    for idx in range(len(trimmed) - 1, max(len(trimmed) - 4, -1), -1):
-        if trimmed[idx].endswith((".", "!", "?", ",", "...")):
-            trimmed = trimmed[: idx + 1]
-            break
-    else:
-        trimmed[-1] = trimmed[-1].rstrip(",;:") + "."
-    return " ".join(trimmed)
 
 
 def _shot_descreve_gesto(shot: PlannerShot) -> bool:
@@ -484,7 +465,7 @@ def plan_web_video(
 
     user_payload = {
         "briefing_usuario": request.prompt,
-        "roteiro_pdf_contexto": pdf_text or None,
+        "roteiro_cliente": pdf_text or None,
         "product_reference_required": product_reference_required,
         "product_reference_triggers": product_reference_matches,
         "product_render_strategy": "background_only_then_official_overlay",
@@ -492,6 +473,7 @@ def plan_web_video(
         "narration_forbidden": narration_forbidden,
         "duracao_total_segundos": request.duration_seconds,
         "shots_necessarios": shot_count,
+        "palavras_de_narracao_que_cabem": _narration_word_budget(request.duration_seconds),
         "resolucao_desejada": request.resolution,
         "orientacao": request.orientation,
         "aspect_ratio": "9:16" if request.orientation == "vertical" else "16:9",
@@ -564,9 +546,6 @@ def plan_web_video(
 
     normalized_shots: list[PlannerShot] = []
     for index, shot in enumerate(plan.shots, start=1):
-        trimmed_narration = _trim_narration_to_fit(
-            shot.narration_text_pt, SHOT_BLOCK_SECONDS
-        )
         visual_prompt = shot.visual_prompt_en
         if text_overlay_forbidden and NO_TEXT_VISUAL_CONSTRAINT not in visual_prompt:
             visual_prompt = f"{visual_prompt.rstrip()} {NO_TEXT_VISUAL_CONSTRAINT}"
@@ -577,7 +556,7 @@ def plan_web_video(
                 update={
                     "shot_number": index,
                     "duration_seconds": SHOT_BLOCK_SECONDS,
-                    "narration_text_pt": "" if narration_forbidden else trimmed_narration,
+                    "narration_text_pt": "" if narration_forbidden else shot.narration_text_pt,
                     "visual_prompt_en": visual_prompt,
                     "overlay_text": None if text_overlay_forbidden else shot.overlay_text,
                 }

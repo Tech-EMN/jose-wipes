@@ -63,7 +63,7 @@ def _base_payload():
                 },
                 "notes": "ok",
             }
-            for idx in range(1, 7)
+            for idx in range(1, 6)
         ],
     }
 
@@ -119,7 +119,7 @@ def main():
             )
             return 1
 
-        if len(plan.shots) != 6:
+        if len(plan.shots) != 5:
             print(f"  x Quantidade de shots incorreta: {len(plan.shots)}")
             return 1
 
@@ -139,8 +139,8 @@ def main():
             print("  x O planner nao recebeu a flag de referencia do produto")
             return 1
 
-        if plan.shots[0].product_overlay.tamanho_pct != 15:
-            print(f"  x tamanho_pct deveria ter sido clampado para 15: {plan.shots[0].product_overlay}")
+        if plan.shots[0].product_overlay.tamanho_pct != 45:
+            print(f"  x tamanho_pct sem gesto deveria ficar no minimo de 45: {plan.shots[0].product_overlay}")
             return 1
         if plan.shots[0].product_overlay.posicao != "centro_inferior":
             print(f"  x posicao invalida deveria virar centro_inferior: {plan.shots[0].product_overlay}")
@@ -148,8 +148,8 @@ def main():
         if plan.shots[0].product_overlay.inicio_seg != 0:
             print(f"  x inicio_seg negativo deveria virar 0: {plan.shots[0].product_overlay}")
             return 1
-        if plan.shots[1].product_overlay.tamanho_pct != 75:
-            print(f"  x tamanho_pct deveria ter sido clampado para 75: {plan.shots[1].product_overlay}")
+        if plan.shots[1].product_overlay.tamanho_pct != 55:
+            print(f"  x tamanho_pct sem gesto deveria ficar no maximo de 55: {plan.shots[1].product_overlay}")
             return 1
         if not plan.shots[-1].product_overlay.ativo:
             print("  x O planner deveria forcar product_overlay no ultimo shot")
