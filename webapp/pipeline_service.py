@@ -35,6 +35,7 @@ from scripts.higgsfield_utils import upload_higgsfield_file
 from scripts.uploader import upload_para_drive
 from webapp.model_registry import VideoModelConfig
 from webapp.narration_plan import (
+    BRAND_CARD_DURATION_SECONDS,
     DurationRange,
     NarrationClip,
     budget_warning,
@@ -44,7 +45,6 @@ from webapp.schemas import CreateJobRequest, DurationLiteral, PlannerOutput
 
 
 ProgressCallback = Callable[[str, str], None]
-BRAND_CARD_DURATION_SECONDS = 3
 DEFAULT_SHOT_DURATION_RANGE = DurationRange(min_seconds=3, max_seconds=15)
 
 

@@ -279,3 +279,38 @@ def test_mismatched_inputs_are_rejected() -> None:
         fit_narration_to_budget(
             ["Uma."], [5, 5], budget_seconds=10, duration_range=KLING_RANGE, synthesize=_fake_synthesizer([])
         )
+
+
+def test_narration_longer_than_the_model_limit_counts_in_full_against_the_budget() -> None:
+    long_shot = " ".join(f"Frase longa número {index} do roteiro." for index in range(1, 7))
+
+    fits = fit_narration_to_budget(
+        [long_shot, "José uáipes."], [5, 5], budget_seconds=27, duration_range=KLING_RANGE, synthesize=_fake_synthesizer([])
+    )
+    overflows = fit_narration_to_budget(
+        [long_shot, "José uáipes."], [5, 5], budget_seconds=20, duration_range=KLING_RANGE, synthesize=_fake_synthesizer([])
+    )
+
+    assert fits.required_seconds == 22
+    assert fits.shot_durations == (15, 3)
+    assert fits.removed_sentences == ()
+    assert overflows.removed_sentences == ("Frase longa número 6 do roteiro.",)
+    assert overflows.clips[1].text == "José uáipes."
+
+
+def test_long_overflow_is_resolved_with_few_synthesis_calls() -> None:
+    calls: list[tuple[int, str]] = []
+    sentences = [f"Frase número {index:02d} aqui." for index in range(1, 13)]
+
+    budget = fit_narration_to_budget(
+        [" ".join(sentences), "José uáipes."],
+        [5, 5],
+        budget_seconds=10,
+        duration_range=KLING_RANGE,
+        synthesize=_fake_synthesizer(calls),
+    )
+
+    assert budget.clips[0].text == " ".join(sentences[:3])
+    assert budget.removed_sentences == tuple(sentences[3:])
+    assert budget.shot_durations == (7, 3)
+    assert len(calls) == 3

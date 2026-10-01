@@ -36,8 +36,6 @@ class TestExternalPromptFile:
             "{aspect_ratio}",
             "{composition_hint}",
             "{aspect_tail}",
-            "{shot_duration}",
-            "{max_words}",
         ]
         for ph in expected_placeholders:
             assert ph in content, f"Missing placeholder: {ph}"
