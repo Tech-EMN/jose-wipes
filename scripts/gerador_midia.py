@@ -422,12 +422,15 @@ def _probe_video_dimensions(path):
         return None
 
 
-def combinar_video_audio(video_path, audio_path, output_path, max_extra_seconds=2.5):
+def medir_duracao_segundos(path):
+    return _probe_duration_seconds(path)
+
+
+def combinar_video_audio(video_path, audio_path, output_path, max_extra_seconds=None):
     """Combina vídeo + áudio com FFmpeg, estendendo o vídeo se o áudio for maior.
 
-    Se a narração for um pouco mais longa que o shot (ex.: 5.4s em um shot de 5s),
-    congelamos o último frame em vez de cortar o áudio no meio da fala. Limitamos
-    a extensão para evitar pausas estranhamente longas.
+    Se a narração for mais longa que o shot, congelamos o último frame em vez de
+    cortar o áudio no meio da fala. max_extra_seconds limita a extensão quando informado.
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -438,7 +441,9 @@ def combinar_video_audio(video_path, audio_path, output_path, max_extra_seconds=
 
     extra = 0.0
     if video_dur is not None and audio_dur is not None and audio_dur > video_dur:
-        extra = min(audio_dur - video_dur + 0.2, max_extra_seconds)
+        extra = audio_dur - video_dur + 0.2
+        if max_extra_seconds is not None:
+            extra = min(extra, max_extra_seconds)
         log(
             f"  Áudio ({audio_dur:.2f}s) maior que vídeo ({video_dur:.2f}s); "
             f"congelando último frame por +{extra:.2f}s"

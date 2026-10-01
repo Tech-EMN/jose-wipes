@@ -18,6 +18,7 @@ _NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 _DEFAULT_FFMPEG_TIMEOUT = int(os.getenv("JW_FFMPEG_TIMEOUT", "300"))
 LOGO_OVERLAY_WIDTH_PCT = 15
 BRAND_CARD_LOGO_WIDTH_PCT = 80
+DURATION_TOLERANCE_SECONDS = 0.25
 ALPHA_PIXEL_FORMATS = frozenset(
     {"rgba", "bgra", "argb", "abgr", "ya8", "ya16be", "ya16le", "rgba64be", "rgba64le", "gbrap", "pal8"}
 )
@@ -566,6 +567,19 @@ def gerar_card_logo(output_path, logo_path, duracao=3, largura=1080, altura=1920
         return None
 
 
+def _obter_duracao(video_path):
+    try:
+        probe = _subprocess_run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", str(video_path)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return float(json.loads(probe.stdout)["format"]["duration"])
+    except (subprocess.SubprocessError, OSError, ValueError, TypeError, KeyError):
+        return None
+
+
 def _limitar_duracao(video_path, duracao_segundos):
     video_path = Path(video_path)
     trimmed_path = video_path.with_name(f"_{video_path.stem}_trimmed{video_path.suffix}")
@@ -652,25 +666,37 @@ def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
         log("✗ Nenhuma cena normalizada com sucesso!")
         return None
 
-    if duracao_card_final:
-        if duracao_maxima is None or len(normalizados) < 2:
+    if duracao_card_final and len(normalizados) < 2:
+        _cleanup(temp_files)
+        return None
+
+    if duracao_maxima is not None:
+        duracao_conteudo_maxima = float(duracao_maxima) - float(duracao_card_final or 0)
+        if duracao_conteudo_maxima <= 0:
             _cleanup(temp_files)
             return None
-        duracao_conteudo = float(duracao_maxima) - float(duracao_card_final)
-        if duracao_conteudo <= 0:
-            _cleanup(temp_files)
-            return None
+        cenas_conteudo = normalizados[:-1] if duracao_card_final else normalizados
         conteudo_path = final_dir / f"_conteudo_{ts}.mp4"
         temp_files.append(conteudo_path)
-        result = concatenar_cenas(normalizados[:-1], conteudo_path)
+        result = concatenar_cenas(cenas_conteudo, conteudo_path)
         if not result:
             _cleanup(temp_files)
             return None
-        result = _limitar_duracao(conteudo_path, duracao_conteudo)
-        if not result:
+        duracao_conteudo = _obter_duracao(conteudo_path)
+        if duracao_conteudo is None:
             _cleanup(temp_files)
             return None
-        normalizados = [result, normalizados[-1]]
+        if duracao_conteudo > duracao_conteudo_maxima + DURATION_TOLERANCE_SECONDS:
+            log(
+                f"Conteúdo com {duracao_conteudo:.2f}s passa do teto de "
+                f"{duracao_conteudo_maxima:.2f}s; cortando o excesso"
+            )
+            result = _limitar_duracao(conteudo_path, duracao_conteudo_maxima)
+            if not result:
+                _cleanup(temp_files)
+                return None
+        cartao = [normalizados[-1]] if duracao_card_final else []
+        normalizados = [result, *cartao]
 
     # 2. Concatenar
     concat_path = final_dir / f"_concat_{ts}.mp4"
@@ -687,13 +713,6 @@ def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
         _cleanup(temp_files)
         return None
 
-    if duracao_maxima is not None and not duracao_card_final:
-        result = _limitar_duracao(final_path, duracao_maxima)
-        if not result:
-            _cleanup(temp_files)
-            return None
-        final_path = result
-
     # 4. Info do resultado
     try:
         probe = _subprocess_run(
@@ -709,7 +728,7 @@ def compor_video_final(cenas_geradas, titulo, logo_path=None, *,
         audio_streams = [stream for stream in streams if stream.get("codec_type") == "audio"]
         valid_duration = duracao > 0
         if duracao_maxima is not None:
-            valid_duration = abs(duracao - float(duracao_maxima)) <= 0.25
+            valid_duration = valid_duration and duracao <= float(duracao_maxima) + DURATION_TOLERANCE_SECONDS
         valid_video = (
             len(video_streams) == 1
             and video_streams[0].get("codec_name") == "h264"

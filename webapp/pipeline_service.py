@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Callable, get_args
 
 from scripts.compositor import (
     BRAND_CARD_LOGO_WIDTH_PCT,
@@ -27,16 +27,47 @@ from scripts.gerador_midia import (
     combinar_video_audio,
     gerar_audio_elevenlabs,
     gerar_video_higgsfield,
+    medir_duracao_segundos,
 )
+from scripts.higgsfield_model_profiles import ModelArgumentProfile, find_argument_profile
 from scripts.integration_errors import IntegrationFailure
 from scripts.higgsfield_utils import upload_higgsfield_file
 from scripts.uploader import upload_para_drive
 from webapp.model_registry import VideoModelConfig
-from webapp.schemas import CreateJobRequest, PlannerOutput
+from webapp.narration_plan import (
+    DurationRange,
+    NarrationClip,
+    budget_warning,
+    fit_narration_to_budget,
+)
+from webapp.schemas import CreateJobRequest, DurationLiteral, PlannerOutput
 
 
 ProgressCallback = Callable[[str, str], None]
 BRAND_CARD_DURATION_SECONDS = 3
+DEFAULT_SHOT_DURATION_RANGE = DurationRange(min_seconds=3, max_seconds=15)
+
+
+def _faixa_de_duracao(model_config: VideoModelConfig) -> DurationRange:
+    profiles = [
+        profile
+        for application in (model_config.application, model_config.fallback_application)
+        if application
+        and isinstance(profile := find_argument_profile(application), ModelArgumentProfile)
+    ]
+    if not profiles:
+        return DEFAULT_SHOT_DURATION_RANGE
+    return DurationRange(
+        min_seconds=max(profile.min_duration_seconds for profile in profiles),
+        max_seconds=min(profile.max_duration_seconds for profile in profiles),
+    )
+
+
+def _imagem_do_cartao(ref_logo_path: str | None, ref_embalagem_path: str | None) -> Path | None:
+    for candidate in (ref_logo_path, ref_embalagem_path, obter_path_imagem_produto()):
+        if candidate and Path(candidate).exists():
+            return Path(candidate)
+    return None
 
 
 def _largura_exibida(largura_video: int, tamanho_pct: float) -> int:
@@ -308,6 +339,51 @@ def render_planned_video(
     if ref_embalagem_path and Path(ref_embalagem_path).exists():
         produto_overlay_path = Path(ref_embalagem_path)
 
+    card_image_path = _imagem_do_cartao(ref_logo_path, ref_embalagem_path)
+    card_duration = BRAND_CARD_DURATION_SECONDS if card_image_path else 0
+
+    def sintetizar_narracao(shot_index: int, texto: str) -> NarrationClip:
+        shot = plan.shots[shot_index]
+        audio_path = gerar_audio_elevenlabs(
+            shot.voice_persona,
+            texto,
+            f"{cenas_dir / f'shot_{shot.shot_number:02d}'}_audio.mp3",
+        )
+        if not audio_path:
+            raise _required_step_failure(
+                service="elevenlabs",
+                stage="generating_audio",
+                code="narration_failed",
+                message=f"Falha ao gerar a narração da cena {shot.shot_number}.",
+            )
+        duracao_audio = medir_duracao_segundos(audio_path)
+        if duracao_audio is None:
+            raise _required_step_failure(
+                service="ffmpeg",
+                stage="generating_audio",
+                code="narration_probe_failed",
+                message=f"Não foi possível medir a narração da cena {shot.shot_number}.",
+            )
+        return NarrationClip(text=texto, audio_path=Path(audio_path), duration_seconds=duracao_audio)
+
+    if progress_cb:
+        progress_cb("generating_audio", "Gerando e medindo as narrações...")
+    narracao = fit_narration_to_budget(
+        [shot.narration_text_pt for shot in plan.shots],
+        [shot.duration_seconds for shot in plan.shots],
+        budget_seconds=request.duration_seconds - card_duration,
+        duration_range=_faixa_de_duracao(model_config),
+        synthesize=sintetizar_narracao,
+    )
+    aviso_roteiro = budget_warning(
+        narracao,
+        ceiling_seconds=request.duration_seconds,
+        reserved_seconds=card_duration,
+        available_ceilings=get_args(DurationLiteral),
+    )
+    if aviso_roteiro:
+        warnings.append(aviso_roteiro)
+
     rendered_scenes: list[str] = []
     total_shots = len(plan.shots)
 
@@ -325,7 +401,7 @@ def render_planned_video(
             shot.visual_prompt_en,
             aspecto=aspect_ratio,
             resolucao=request.resolution,
-            duracao=shot.duration_seconds,
+            duracao=narracao.shot_durations[shot_index],
             output_path=f"{base_path}.mp4",
             reference_image_url=reference_image_url if should_use_reference else None,
             extra_arguments=model_config.default_arguments,
@@ -337,34 +413,21 @@ def render_planned_video(
 
         current_video_path = Path(video_path)
 
-        if shot.narration_text_pt:
-            audio_path = gerar_audio_elevenlabs(
-                shot.voice_persona,
-                shot.narration_text_pt,
-                f"{base_path}_audio.mp3",
+        clip = narracao.clips[shot_index]
+        if clip is not None:
+            combined_path = combinar_video_audio(
+                current_video_path,
+                clip.audio_path,
+                f"{base_path}_combined.mp4",
             )
-            if audio_path:
-                combined_path = combinar_video_audio(
-                    current_video_path,
-                    audio_path,
-                    f"{base_path}_combined.mp4",
-                )
-                if combined_path:
-                    current_video_path = Path(combined_path)
-                else:
-                    raise _required_step_failure(
-                        service="ffmpeg",
-                        stage="composing_audio",
-                        code="audio_composition_failed",
-                        message=f"Falha ao combinar a narração da cena {shot.shot_number}.",
-                    )
-            else:
+            if not combined_path:
                 raise _required_step_failure(
-                    service="elevenlabs",
-                    stage="generating_audio",
-                    code="narration_failed",
-                    message=f"Falha ao gerar a narração da cena {shot.shot_number}.",
+                    service="ffmpeg",
+                    stage="composing_audio",
+                    code="audio_composition_failed",
+                    message=f"Falha ao combinar a narração da cena {shot.shot_number}.",
                 )
+            current_video_path = Path(combined_path)
 
         if shot.product_overlay.ativo:
             overlay_path = overlay_produto(
@@ -404,17 +467,6 @@ def render_planned_video(
 
         rendered_scenes.append(str(current_video_path))
 
-    # Card final com a logo/embalagem real da marca sobre fundo branco limpo
-    card_image_path = None
-    if ref_logo_path and Path(ref_logo_path).exists():
-        card_image_path = Path(ref_logo_path)
-    elif ref_embalagem_path and Path(ref_embalagem_path).exists():
-        card_image_path = Path(ref_embalagem_path)
-    else:
-        default_product = obter_path_imagem_produto()
-        if default_product and Path(default_product).exists():
-            card_image_path = Path(default_product)
-
     for image_path, largura_exibida in _imagens_da_marca(
         plan,
         largura_video=largura,
@@ -425,7 +477,6 @@ def render_planned_video(
         rotulo = "logo" if ref_logo_path and image_path == Path(ref_logo_path) else "embalagem"
         warnings.extend(_avisos_qualidade_imagem(rotulo, image_path, largura_exibida))
 
-    card_duration = 0
     if card_image_path:
         if progress_cb:
             progress_cb("composing", "Gerando card final com a logo da marca...")
@@ -439,7 +490,6 @@ def render_planned_video(
         )
         if card_video:
             rendered_scenes.append(str(card_video))
-            card_duration = BRAND_CARD_DURATION_SECONDS
         else:
             raise _required_step_failure(
                 service="ffmpeg",
