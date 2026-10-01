@@ -100,6 +100,8 @@ NARRATION_WORDS_PER_SECOND = 2.0
 NARRATION_TAIL_RESERVE_SECONDS = 0.6
 # Quando há personagem com gesto/embalagem na mão, atrasamos o overlay.
 PRODUCT_OVERLAY_HAND_DELAY_SECONDS = 2.0
+PRODUCT_OVERLAY_MIN_PCT = 45
+PRODUCT_OVERLAY_MAX_PCT = 55
 PRODUCT_OVERLAY_HAND_KEYWORDS = (
     "raises",
     "raising",
@@ -157,6 +159,10 @@ def _briefing_proibe_narracao(*texts: str | None) -> bool:
     return any(pattern.search(combined) for pattern in NO_NARRATION_PATTERNS)
 
 
+def _tamanho_overlay_padrao(tamanho_pct: int) -> int:
+    return max(PRODUCT_OVERLAY_MIN_PCT, min(tamanho_pct, PRODUCT_OVERLAY_MAX_PCT))
+
+
 def _preparar_prompt_para_composicao(
     shot: PlannerShot,
     global_style: str,
@@ -173,7 +179,7 @@ def _preparar_prompt_para_composicao(
                 if shot.product_overlay.posicao == "centro"
                 else shot.product_overlay.posicao
             ),
-            tamanho_pct=max(shot.product_overlay.tamanho_pct, 70),
+            tamanho_pct=_tamanho_overlay_padrao(shot.product_overlay.tamanho_pct),
             inicio_seg=0.0,
         )
 
@@ -617,7 +623,7 @@ def plan_web_video(
                 "product_overlay": ProductOverlayConfig(
                     ativo=True,
                     posicao="centro",
-                    tamanho_pct=max(last_shot.product_overlay.tamanho_pct, 55),
+                    tamanho_pct=_tamanho_overlay_padrao(last_shot.product_overlay.tamanho_pct),
                     inicio_seg=last_shot.product_overlay.inicio_seg,
                 )
             }
