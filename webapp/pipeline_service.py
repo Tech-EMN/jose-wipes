@@ -293,6 +293,14 @@ def render_planned_video(
             f"Resolução {request.resolution} não é suportada pelo modelo {model_config.label}."
         )
 
+    resolved_model = model_config.for_resolution(request.resolution)
+    if resolved_model.application != model_config.application:
+        warnings.append(
+            f"Em {request.resolution}, o nível {model_config.tier} gera com {resolved_model.application}, "
+            f"porque {model_config.application} não entrega essa resolução de forma nativa."
+        )
+    model_config = resolved_model
+
     # Determine which reference image to use for product shots
     # Priority: user-uploaded embalagem > default product image
     reference_image_url = None

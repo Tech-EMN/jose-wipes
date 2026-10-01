@@ -36,7 +36,7 @@ const REF_TYPES = ["embalagem", "logo", "cores"];
 
 /* ===== MODEL HINTS ===== */
 const MODEL_HINTS = {
-  seedance_1_5_pro: "Kling 3.0 Std Padrão: via Higgsfield. Bom custo-benefício para produção em escala.",
+  seedance_1_5_pro: "Kling 3.0 Std Padrão: via Higgsfield, 720p. Em 1080p gera com o Kling 3.0 Pro, com custo de Realista.",
   kling_3_0: "Kling 3.0 Realista: via Higgsfield. Modelo para cenas com personagens.",
   veo_3_1: "Wan 3.0 Prime Profissional: via Higgsfield, 1080p nativo. Ideal para entregas comerciais.",
 };
