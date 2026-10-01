@@ -7,10 +7,14 @@ from pathlib import Path
 from typing import Callable
 
 from scripts.compositor import (
+    BRAND_CARD_LOGO_WIDTH_PCT,
+    LOGO_OVERLAY_WIDTH_PCT,
     adicionar_logo_overlay,
     adicionar_texto_overlay,
     compor_video_final,
     gerar_card_logo,
+    imagem_tem_transparencia,
+    obter_formato_imagem,
     overlay_produto,
 )
 from scripts.config import (
@@ -33,6 +37,55 @@ from webapp.schemas import CreateJobRequest, PlannerOutput
 
 ProgressCallback = Callable[[str, str], None]
 BRAND_CARD_DURATION_SECONDS = 3
+
+
+def _largura_exibida(largura_video: int, tamanho_pct: float) -> int:
+    return round(largura_video * float(tamanho_pct) / 100)
+
+
+def _imagens_da_marca(
+    plan: PlannerOutput,
+    *,
+    largura_video: int,
+    produto_overlay_path: Path | None,
+    logo_path: Path | None,
+    card_image_path: Path | None,
+) -> dict[Path, int]:
+    exibicoes: dict[Path, int] = {}
+
+    def registrar(image_path: Path | None, tamanho_pct: float) -> None:
+        if image_path is None:
+            return
+        largura = _largura_exibida(largura_video, tamanho_pct)
+        exibicoes[image_path] = max(exibicoes.get(image_path, 0), largura)
+
+    overlays = [shot.product_overlay.tamanho_pct for shot in plan.shots if shot.product_overlay.ativo]
+    if overlays:
+        produto_padrao = obter_path_imagem_produto()
+        registrar(produto_overlay_path or (Path(produto_padrao) if produto_padrao else None), max(overlays))
+    registrar(logo_path, LOGO_OVERLAY_WIDTH_PCT)
+    registrar(card_image_path, BRAND_CARD_LOGO_WIDTH_PCT)
+    return exibicoes
+
+
+def _avisos_qualidade_imagem(rotulo: str, image_path: Path, largura_exibida: int) -> list[str]:
+    formato = obter_formato_imagem(image_path)
+    if formato is None:
+        return [f"Não foi possível analisar a imagem de {rotulo} ({image_path.name})."]
+
+    largura, pix_fmt = formato
+    avisos: list[str] = []
+    if not imagem_tem_transparencia(pix_fmt):
+        avisos.append(
+            f"A imagem de {rotulo} não tem fundo transparente e vai aparecer com o fundo original no vídeo. "
+            "Envie um PNG sem fundo."
+        )
+    if largura < largura_exibida:
+        avisos.append(
+            f"A imagem de {rotulo} tem {largura}px de largura, mas aparece com {largura_exibida}px no vídeo "
+            f"e vai ficar borrada. Envie uma versão com pelo menos {largura_exibida}px."
+        )
+    return avisos
 
 
 def _required_step_failure(
@@ -361,6 +414,16 @@ def render_planned_video(
         default_product = obter_path_imagem_produto()
         if default_product and Path(default_product).exists():
             card_image_path = Path(default_product)
+
+    for image_path, largura_exibida in _imagens_da_marca(
+        plan,
+        largura_video=largura,
+        produto_overlay_path=produto_overlay_path,
+        logo_path=logo_path_to_use,
+        card_image_path=card_image_path,
+    ).items():
+        rotulo = "logo" if ref_logo_path and image_path == Path(ref_logo_path) else "embalagem"
+        warnings.extend(_avisos_qualidade_imagem(rotulo, image_path, largura_exibida))
 
     card_duration = 0
     if card_image_path:

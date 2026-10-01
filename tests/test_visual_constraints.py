@@ -99,7 +99,7 @@ def test_planner_honors_no_text_brief() -> None:
     assert all("locked-off camera" in shot.visual_prompt_en for shot in plan.shots)
     assert all("dolly" not in shot.visual_prompt_en.lower() for shot in plan.shots)
     assert all(shot.product_overlay.posicao == "centro_inferior" for shot in plan.shots)
-    assert all(shot.product_overlay.tamanho_pct >= 70 for shot in plan.shots)
+    assert all(45 <= shot.product_overlay.tamanho_pct <= 55 for shot in plan.shots)
     assert all(shot.product_overlay.inicio_seg == 0 for shot in plan.shots)
 
 

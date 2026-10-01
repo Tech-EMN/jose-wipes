@@ -16,6 +16,11 @@ _NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
 _DEFAULT_FFMPEG_TIMEOUT = int(os.getenv("JW_FFMPEG_TIMEOUT", "300"))
+LOGO_OVERLAY_WIDTH_PCT = 15
+BRAND_CARD_LOGO_WIDTH_PCT = 80
+ALPHA_PIXEL_FORMATS = frozenset(
+    {"rgba", "bgra", "argb", "abgr", "ya8", "ya16be", "ya16le", "rgba64be", "rgba64le", "gbrap", "pal8"}
+)
 
 
 def _subprocess_run(cmd, **kwargs):
@@ -59,6 +64,42 @@ def _obter_dimensoes_video(video_path):
         return int(stream["width"]), int(stream["height"])
     except (subprocess.SubprocessError, OSError, ValueError, TypeError, KeyError, IndexError):
         return None
+
+
+def _largura_relativa(base_path, tamanho_pct):
+    dimensions = _obter_dimensoes_video(base_path)
+    if dimensions is None:
+        return None
+    return max(1, round(dimensions[0] * float(tamanho_pct) / 100))
+
+
+def obter_formato_imagem(image_path):
+    try:
+        probe = _subprocess_run(
+            [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,pix_fmt",
+                "-of",
+                "json",
+                str(image_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        stream = json.loads(probe.stdout)["streams"][0]
+        return int(stream["width"]), str(stream["pix_fmt"])
+    except (subprocess.SubprocessError, OSError, ValueError, TypeError, KeyError, IndexError):
+        return None
+
+
+def imagem_tem_transparencia(pix_fmt):
+    return pix_fmt in ALPHA_PIXEL_FORMATS or pix_fmt.startswith("yuva")
 
 
 def _detectar_crop_sem_letterbox(input_path, sample_seconds=4):
@@ -200,7 +241,7 @@ def concatenar_cenas(cenas_paths, output_path):
 
 
 def adicionar_logo_overlay(video_path, logo_path, output_path, posicao="inferior_direito",
-                            tamanho_pct=12, opacidade=0.9):
+                            tamanho_pct=LOGO_OVERLAY_WIDTH_PCT, opacidade=0.9):
     """Adiciona logo overlay ao vídeo. Retorna path ou None."""
     video_path = Path(video_path)
     output_path = Path(output_path)
@@ -227,8 +268,15 @@ def adicionar_logo_overlay(video_path, logo_path, output_path, posicao="inferior
     }
     pos = pos_map.get(posicao, pos_map["inferior_direito"])
 
+    logo_width = _largura_relativa(video_path, tamanho_pct)
+    if logo_width is None:
+        log(f"Não foi possível medir o vídeo ({video_path}); copiando sem logo")
+        import shutil
+        shutil.copy2(video_path, output_path)
+        return output_path
+
     filter_complex = (
-        f"[1:v]scale=iw*{tamanho_pct}/100:-1,format=rgba,"
+        f"[1:v]scale={logo_width}:-1,format=rgba,"
         f"colorchannelmixer=aa={opacidade}[logo];"
         f"[0:v][logo]overlay={pos}[out]"
     )
@@ -315,13 +363,18 @@ def compor_produto_na_imagem(imagem_path, output_path, produto_path=None,
     }
     pos = pos_map.get(posicao, pos_map["mao_direita"])
 
+    product_width = _largura_relativa(imagem_path, tamanho_pct)
+    if product_width is None:
+        log(f"Não foi possível medir a imagem da cena ({imagem_path})")
+        return None
+
     try:
         _subprocess_run([
             "ffmpeg", "-y",
             "-i", str(imagem_path),
             "-i", str(produto_path),
             "-filter_complex",
-            f"[1:v]scale=iw*{tamanho_pct}/100:-1[prod];[0:v][prod]overlay={pos}:format=auto[out]",
+            f"[1:v]scale={product_width}:-1[prod];[0:v][prod]overlay={pos}:format=auto[out]",
             "-map", "[out]",
             str(output_path)
         ], capture_output=True, text=True, check=True, timeout=60)
@@ -492,7 +545,7 @@ def gerar_card_logo(output_path, logo_path, duracao=3, largura=1080, altura=1920
         return None
 
     fps = 24
-    logo_width = int(largura * 0.80)
+    logo_width = int(largura * BRAND_CARD_LOGO_WIDTH_PCT / 100)
 
     try:
         _subprocess_run([
