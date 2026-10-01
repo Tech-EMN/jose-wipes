@@ -22,7 +22,7 @@ from scripts.product_reference import (
     aplicar_regra_referencia_produto_plano,
     scene_dict_pede_referencia_produto,
 )
-from scripts.higgsfield_model_profiles import KLING_3_0_PRO_APPLICATION
+from scripts.higgsfield_model_profiles import KLING_3_0_PRO_APPLICATION, SOUL_2_APPLICATION
 from scripts.gerador_midia import (
     gerar_video_higgsfield, gerar_audio_elevenlabs,
     combinar_video_audio, imagem_para_video_kenburns
@@ -122,7 +122,7 @@ def executar_pipeline(briefing=None, plano=None):
 
             if is_image_to_video:
                 # Gerar imagem primeiro, depois animar com modelo de vídeo
-                modelo_imagem = cena.get("modelo_imagem", "higgsfield-ai/soul/standard")
+                modelo_imagem = cena.get("modelo_imagem", SOUL_2_APPLICATION)
                 print(f"  Etapa 1: Gerando imagem com {modelo_imagem}...")
                 img_path = gerar_video_higgsfield(
                     modelo_imagem, prompt, aspecto, resolucao, duracao,

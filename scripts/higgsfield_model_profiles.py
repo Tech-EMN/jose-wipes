@@ -10,6 +10,8 @@ KLING_3_0_STD_APPLICATION = "kling-video/v3.0/std/text-to-video"
 KLING_3_0_PRO_APPLICATION = "kling-video/v3.0/pro/text-to-video"
 KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION = "kling-video/v3.0/pro/image-to-video"
 WAN_3_0_PRIME_APPLICATION = "alibaba/wan-3.0-prime/text-to-video"
+SOUL_2_APPLICATION = "higgsfield-ai/soul/v2/standard"
+SOUL_STANDARD_APPLICATION = "higgsfield-ai/soul/standard"
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,26 @@ class ModelArgumentProfile:
         return arguments
 
 
+@dataclass(frozen=True)
+class ImageArgumentProfile:
+    uses_image: bool = False
+
+    def build_arguments(
+        self,
+        *,
+        prompt: str,
+        aspect_ratio: str,
+        resolution: str,
+        duration_seconds: int,
+        reference_image_url: str | None,
+    ) -> dict[str, object]:
+        return {"prompt": prompt, "aspect_ratio": aspect_ratio, "resolution": resolution}
+
+
+ArgumentProfile = ModelArgumentProfile | ImageArgumentProfile
+
+SOUL_PROFILE = ImageArgumentProfile()
+
 KLING_3_0_PROFILE = ModelArgumentProfile(
     min_duration_seconds=3,
     max_duration_seconds=15,
@@ -83,15 +105,17 @@ WAN_3_0_PRIME_PROFILE = ModelArgumentProfile(
     sends_resolution=True,
 )
 
-MODEL_ARGUMENT_PROFILES: Mapping[str, ModelArgumentProfile] = MappingProxyType(
+MODEL_ARGUMENT_PROFILES: Mapping[str, ArgumentProfile] = MappingProxyType(
     {
         KLING_3_0_STD_APPLICATION: KLING_3_0_PROFILE,
         KLING_3_0_PRO_APPLICATION: KLING_3_0_PROFILE,
         KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION: KLING_3_0_IMAGE_TO_VIDEO_PROFILE,
         WAN_3_0_PRIME_APPLICATION: WAN_3_0_PRIME_PROFILE,
+        SOUL_2_APPLICATION: SOUL_PROFILE,
+        SOUL_STANDARD_APPLICATION: SOUL_PROFILE,
     }
 )
 
 
-def find_argument_profile(application: str) -> ModelArgumentProfile | None:
+def find_argument_profile(application: str) -> ArgumentProfile | None:
     return MODEL_ARGUMENT_PROFILES.get(application)
