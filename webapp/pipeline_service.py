@@ -41,11 +41,21 @@ from webapp.narration_plan import (
     budget_warning,
     fit_narration_to_budget,
 )
-from webapp.schemas import CreateJobRequest, DurationLiteral, PlannerOutput
+from webapp.schemas import CreateJobRequest, DurationLiteral, PlannerOutput, PlannerShot
 
 
 ProgressCallback = Callable[[str, str], None]
 DEFAULT_SHOT_DURATION_RANGE = DurationRange(min_seconds=3, max_seconds=15)
+
+
+TEXT_POSITION_DEFAULT = "centro_inferior"
+TEXT_POSITION_ABOVE_PRODUCT = "topo"
+
+
+def _posicao_do_texto(shot: PlannerShot) -> str:
+    if shot.product_overlay.ativo and shot.product_overlay.posicao == TEXT_POSITION_DEFAULT:
+        return TEXT_POSITION_ABOVE_PRODUCT
+    return TEXT_POSITION_DEFAULT
 
 
 def _faixa_de_duracao(model_config: VideoModelConfig) -> DurationRange:
@@ -461,7 +471,7 @@ def render_planned_video(
                 current_video_path,
                 shot.overlay_text,
                 f"{base_path}_texto.mp4",
-                "centro_inferior",
+                _posicao_do_texto(shot),
             )
             if text_path:
                 current_video_path = Path(text_path)

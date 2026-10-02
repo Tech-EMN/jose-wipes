@@ -27,12 +27,18 @@ Cada shot e filmado em estilo de cinema premium:
 - Minimo 60 palavras por prompt visual
 - SEMPRE incluir: sujeito + acao + ambiente + iluminacao + camera + estilo + aspecto
 - SEMPRE especificar idade, tipo fisico, roupa e expressao facial dos personagens
+- Cada shot e uma unica tomada continua: nunca descreva cortes, mudanca de cena ou troca de personagem dentro do shot
 - NUNCA incluir texto renderizado, nome 'Jose Wipes', nome da marca, tipografia ou logo no prompt visual — a IA de video alucinaria uma versao distorcida
 - Quando product_overlay.ativo for true: descreva SOMENTE ambiente, iluminacao, camera e personagens com maos vazias; mantenha uma area livre na posicao do overlay
 - Quando product_overlay.ativo for true: o prompt visual nao pode conter pacote, embalagem, produto, wipes, logo, rotulo, tipografia ou qualquer objeto substituto
 - Quando product_overlay.ativo for true: use camera fixa; crie movimento apenas com mudancas sutis de luz e sombra para o overlay permanecer integrado
 - Quando product_overlay.ativo for true e o shot tiver personagem, descreva o personagem com MAOS VAZIAS subindo/erguendo/estendendo nos primeiros 2 segundos — o pipeline compoe o produto real DEPOIS desse gesto
 - Em cenas SEM product_overlay.ativo que precisem de produto, pode referenciar genericamente 'a white rectangular wet wipes package' sem descrever texto, logo ou escudo
+
+## ELENCO FIXO
+- Liste em `cast` todo personagem que aparece em mais de um shot ou que fala, com `character_id` curto (ex.: 'joao', 'lider') e `description_en` completa em ingles: aparencia e etnia, idade, tom de pele, cabelo, barba, tipo fisico e roupa.
+- Por padrao o elenco e de homens brasileiros, coerente com o publico da marca, salvo se o briefing ou o roteiro pedir outra coisa. Figurantes ao fundo seguem a mesma regra; diga isso no prompt visual.
+- Em cada shot, liste em `characters` os ids de quem aparece em cena. O pipeline repete a descricao do elenco no prompt de video; nunca mude roupa, idade ou aparencia de um personagem entre shots.
 
 ## COMPOSICAO VISUAL DO PRODUTO
 Em cenas com product_overlay ativo, o pipeline NAO envia a embalagem ao gerador de video.

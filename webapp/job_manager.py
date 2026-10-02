@@ -17,7 +17,9 @@ from webapp.model_registry import get_model_config
 from webapp.pdf_utils import extract_pdf_text
 from webapp.pipeline_service import render_planned_video
 from webapp.planner import plan_web_video, _prompt_content_hash
-from webapp.schemas import CreateJobRequest, JobStatusResponse
+from webapp.schemas import CreateJobRequest, JobStatusResponse, JobSummary
+
+PLAN_FILENAME = "plano_web.json"
 
 
 PlannerFn = Callable[..., object]
@@ -183,6 +185,43 @@ class JobManager:
             }
         )
 
+    def list_recent_jobs(self, limit: int) -> list[JobSummary]:
+        """Return the newest jobs first, skipping folders without metadata."""
+
+        summaries = [
+            self._summarize(self._read_metadata(job_dir))
+            for job_dir in self.jobs_dir.iterdir()
+            if job_dir.is_dir() and self._metadata_path(job_dir).exists()
+        ]
+        summaries.sort(key=lambda summary: summary.created_at or "", reverse=True)
+        return summaries[:limit]
+
+    def get_job_plan(self, job_id: str) -> dict[str, object] | None:
+        """Return the stored shot plan, or None while planning is pending."""
+
+        plan_path = self._job_dir(job_id) / PLAN_FILENAME
+        if not plan_path.exists():
+            return None
+        return json.loads(plan_path.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _summarize(metadata: dict[str, object]) -> JobSummary:
+        request = metadata.get("request")
+        request_fields = request if isinstance(request, dict) else {}
+        return JobSummary.model_validate(
+            {
+                "job_id": metadata["job_id"],
+                "created_at": metadata.get("created_at"),
+                "status": metadata["status"],
+                "title": metadata.get("title"),
+                "video_model": request_fields.get("video_model"),
+                "resolution": request_fields.get("resolution"),
+                "duration_seconds": request_fields.get("duration_seconds"),
+                "warnings": metadata.get("warnings", []),
+                "failure_code": metadata.get("failure_code"),
+            }
+        )
+
     def get_download_path(self, job_id: str) -> Path | None:
         """Return the completed final video path, if available."""
 
@@ -265,7 +304,7 @@ class JobManager:
                         ),
                     )
 
-            (job_dir / "plano_web.json").write_text(
+            (job_dir / PLAN_FILENAME).write_text(
                 plan.model_dump_json(indent=2),
                 encoding="utf-8",
             )

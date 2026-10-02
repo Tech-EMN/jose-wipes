@@ -10,7 +10,7 @@ from pathlib import Path
 
 BRAND_CARD_DURATION_SECONDS = 3
 NARRATION_TAIL_SECONDS = 0.5
-SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?…])\s+")
+SENTENCE_BOUNDARY = re.compile(r"(?:(?<=[^.…][.!?])|(?<=\.\.\.)(?=\s+[A-ZÀ-Ý])|(?<=…)(?=\s+[A-ZÀ-Ý]))\s+")
 
 
 @dataclass(frozen=True)

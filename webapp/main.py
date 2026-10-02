@@ -16,9 +16,12 @@ from webapp.job_manager import JobManager
 from webapp.moderation import moderate_prompt_sync
 from webapp.rate_limit import RateLimitMiddleware
 from webapp.pdf_utils import MAX_PDF_BYTES
+from webapp.reference_images import TransparencyCheck, check_transparency
 from webapp.schemas import CreateJobRequest
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB per image
+RECENT_JOBS_DEFAULT_LIMIT = 20
+RECENT_JOBS_MAX_LIMIT = 100
 
 app = FastAPI(title="José Wipes Web Video Studio", version="2.0.0")
 app.add_middleware(AuthMiddleware)
@@ -103,6 +106,8 @@ def get_external_health() -> JSONResponse:
 async def _read_upload_image(
     upload: UploadFile | None,
     label: str,
+    *,
+    require_transparency: bool = False,
 ) -> tuple[bytes | None, str | None]:
     """Read and validate an uploaded image file."""
 
@@ -123,6 +128,23 @@ async def _read_upload_image(
             detail=f"A imagem de {label} excede o limite de {MAX_IMAGE_BYTES // (1024 * 1024)} MB.",
         )
 
+    if not require_transparency:
+        return data, upload.filename
+
+    transparency = check_transparency(data, upload.filename)
+    if transparency is TransparencyCheck.UNREADABLE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Não foi possível ler a imagem de {label}. Envie um PNG.",
+        )
+    if transparency is TransparencyCheck.OPAQUE:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"A imagem de {label} não tem fundo transparente e apareceria como um retângulo no vídeo. "
+                "Envie um PNG sem fundo."
+            ),
+        )
     return data, upload.filename
 
 
@@ -186,8 +208,10 @@ async def create_job(
         pdf_name = script_pdf.filename
 
     # Read reference images
-    embalagem_data, embalagem_name = await _read_upload_image(ref_embalagem, "embalagem")
-    logo_data, logo_name = await _read_upload_image(ref_logo, "logo")
+    embalagem_data, embalagem_name = await _read_upload_image(
+        ref_embalagem, "embalagem", require_transparency=True
+    )
+    logo_data, logo_name = await _read_upload_image(ref_logo, "logo", require_transparency=True)
     cores_data, cores_name = await _read_upload_image(ref_cores, "cores da marca")
 
     metadata = job_manager.create_job(
@@ -213,6 +237,29 @@ async def create_job(
             "download_url": status.download_url,
         }
     )
+
+
+@app.get("/api/jobs")
+def list_recent_jobs(limit: int = RECENT_JOBS_DEFAULT_LIMIT) -> JSONResponse:
+    """List the most recent jobs, newest first."""
+
+    bounded_limit = max(1, min(limit, RECENT_JOBS_MAX_LIMIT))
+    jobs = job_manager.list_recent_jobs(bounded_limit)
+    return JSONResponse([job.model_dump() for job in jobs])
+
+
+@app.get("/api/jobs/{job_id}/plan")
+def get_job_plan(job_id: str) -> JSONResponse:
+    """Return the shot plan generated for a job."""
+
+    try:
+        plan = job_manager.get_job_plan(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if plan is None:
+        raise HTTPException(status_code=409, detail="O plano deste job ainda não foi gerado.")
+    return JSONResponse(plan)
 
 
 @app.get("/api/jobs/{job_id}")

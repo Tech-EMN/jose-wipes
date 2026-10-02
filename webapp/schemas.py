@@ -42,6 +42,23 @@ class ProductOverlayConfig(BaseModel):
     inicio_seg: float | None = Field(default=None, ge=0)
 
 
+class PlannerCharacter(BaseModel):
+    """Recurring character whose look must stay identical across shots."""
+
+    character_id: str = Field(min_length=1, max_length=40)
+    description_en: str = Field(min_length=20)
+
+    @field_validator("character_id")
+    @classmethod
+    def normalize_character_id(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("description_en")
+    @classmethod
+    def trim_description(cls, value: str) -> str:
+        return value.strip()
+
+
 class PlannerShot(BaseModel):
     """Single 5-second shot planned by OpenAI."""
 
@@ -52,7 +69,15 @@ class PlannerShot(BaseModel):
     voice_persona: str = "narrador"
     overlay_text: str | None = None
     product_overlay: ProductOverlayConfig = Field(default_factory=ProductOverlayConfig)
+    characters: list[str] = Field(default_factory=list)
     notes: str | None = None
+
+    @field_validator("characters", mode="before")
+    @classmethod
+    def normalize_characters(cls, value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [item.strip().lower() for item in value if isinstance(item, str) and item.strip()]
 
     @field_validator("voice_persona")
     @classmethod
@@ -84,6 +109,7 @@ class PlannerOutput(BaseModel):
     global_style: str = Field(min_length=1)
     final_cta_pt: str = Field(min_length=1)
     notes: str | None = None
+    cast: list[PlannerCharacter] = Field(default_factory=list)
     shots: list[PlannerShot] = Field(min_length=1)
 
     @field_validator("title", "enhanced_brief_pt", "global_style", "final_cta_pt")
@@ -98,6 +124,20 @@ class PlannerOutput(BaseModel):
             return None
         value = value.strip()
         return value or None
+
+
+class JobSummary(BaseModel):
+    """Compact job entry for the recent jobs listing."""
+
+    job_id: str
+    created_at: str | None = None
+    status: str
+    title: str | None = None
+    video_model: str | None = None
+    resolution: str | None = None
+    duration_seconds: int | None = None
+    warnings: list[str] = Field(default_factory=list)
+    failure_code: str | None = None
 
 
 class JobStatusResponse(BaseModel):
