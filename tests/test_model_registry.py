@@ -14,7 +14,7 @@ from scripts.higgsfield_model_profiles import (
 from scripts.integration_errors import IntegrationFailure
 from webapp.pipeline_service import _gerar_video_com_fallback
 
-TIER_ENV_VARS = ("HF_MODEL_PADRAO", "HF_MODEL_KLING_3_0", "HF_MODEL_PROFISSIONAL")
+TIER_ENV_VARS = ("HF_MODEL_PADRAO", "HF_MODEL_PADRAO_1080P", "HF_MODEL_KLING_3_0", "HF_MODEL_PROFISSIONAL")
 
 
 @pytest.fixture
@@ -68,6 +68,35 @@ def test_tier_model_can_be_overridden_by_env(fresh_registry, monkeypatch, env_va
     monkeypatch.setenv(env_var, "vendor/other-model/text-to-video")
 
     assert fresh_registry().get_model_config(key).application == "vendor/other-model/text-to-video"
+
+
+@pytest.mark.parametrize("key", ["seedance_1_5_pro", "sora_2"])
+def test_standard_tier_uses_kling_pro_for_native_1080p(fresh_registry, key) -> None:
+    config = fresh_registry().get_model_config(key)
+
+    at_720p = config.for_resolution("720p")
+    at_1080p = config.for_resolution("1080p")
+
+    assert at_720p.application == KLING_3_0_STD_APPLICATION
+    assert at_720p.fallback_application == KLING_3_0_PRO_APPLICATION
+    assert at_1080p.application == KLING_3_0_PRO_APPLICATION
+    assert at_1080p.fallback_application == ""
+
+
+@pytest.mark.parametrize("key", ["kling_3_0", "veo_3_1"])
+def test_other_tiers_keep_their_model_at_1080p(fresh_registry, key) -> None:
+    config = fresh_registry().get_model_config(key)
+
+    assert config.for_resolution("1080p") == config
+
+
+def test_standard_1080p_model_can_be_overridden_by_env(fresh_registry, monkeypatch) -> None:
+    monkeypatch.setenv("HF_MODEL_PADRAO_1080P", "vendor/other-model/text-to-video")
+
+    config = fresh_registry().get_model_config("seedance_1_5_pro").for_resolution("1080p")
+
+    assert config.application == "vendor/other-model/text-to-video"
+    assert config.fallback_application == KLING_3_0_PRO_APPLICATION
 
 
 def _failure(code: str) -> IntegrationFailure:

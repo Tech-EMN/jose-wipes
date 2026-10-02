@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
 from scripts.higgsfield_model_profiles import (
@@ -25,6 +26,19 @@ class VideoModelConfig:
     default_arguments: dict[str, object] = field(default_factory=dict)
     fallback_application: str = ""
     fallback_note: str = ""
+    resolution_applications: Mapping[ResolutionLiteral, str] = field(default_factory=dict)
+
+    def for_resolution(self, resolution: ResolutionLiteral) -> VideoModelConfig:
+        application = self.resolution_applications.get(resolution)
+        if not application or application == self.application:
+            return self
+        fallback = "" if application == self.fallback_application else self.fallback_application
+        return replace(
+            self,
+            application=application,
+            fallback_application=fallback,
+            resolution_applications={},
+        )
 
 
 def _env_or_default(name: str, fallback: str) -> str:
@@ -43,9 +57,13 @@ _STANDARD_TIER = VideoModelConfig(
     allowed_resolutions=ALL_RESOLUTIONS,
     fallback_application=FALLBACK_APPLICATION,
     fallback_note=(
-        "Kling 3.0 Std via Higgsfield. Se o modelo estiver indisponível, cai para o Kling 3.0 Pro. "
-        "Defina HF_MODEL_PADRAO para trocar de modelo sem deploy."
+        "Kling 3.0 Std via Higgsfield, que gera só em 720p; em 1080p o nível usa o Kling 3.0 Pro. "
+        "Se o modelo estiver indisponível, cai para o Kling 3.0 Pro. "
+        "Defina HF_MODEL_PADRAO e HF_MODEL_PADRAO_1080P para trocar de modelo sem deploy."
     ),
+    resolution_applications={
+        "1080p": _env_or_default("HF_MODEL_PADRAO_1080P", KLING_3_0_PRO_APPLICATION),
+    },
 )
 
 _REALISTIC_TIER = VideoModelConfig(
