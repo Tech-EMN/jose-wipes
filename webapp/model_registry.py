@@ -10,6 +10,7 @@ from scripts.higgsfield_model_profiles import (
     KLING_3_0_PRO_APPLICATION,
     KLING_3_0_STD_APPLICATION,
     WAN_3_0_PRIME_APPLICATION,
+    find_image_to_video_application,
 )
 from webapp.schemas import ResolutionLiteral, VideoModelLiteral
 
@@ -37,6 +38,18 @@ class VideoModelConfig:
             self,
             application=application,
             fallback_application=fallback,
+            resolution_applications={},
+        )
+
+    def image_to_video(self) -> VideoModelConfig | None:
+        application = find_image_to_video_application(self.application)
+        if application is None:
+            return None
+        fallback = find_image_to_video_application(self.fallback_application) if self.fallback_application else None
+        return replace(
+            self,
+            application=application,
+            fallback_application=fallback or "",
             resolution_applications={},
         )
 
