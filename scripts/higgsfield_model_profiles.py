@@ -9,7 +9,9 @@ from types import MappingProxyType
 KLING_3_0_STD_APPLICATION = "kling-video/v3.0/std/text-to-video"
 KLING_3_0_PRO_APPLICATION = "kling-video/v3.0/pro/text-to-video"
 KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION = "kling-video/v3.0/pro/image-to-video"
+KLING_3_0_STD_IMAGE_TO_VIDEO_APPLICATION = "kling-video/v3.0/std/image-to-video"
 WAN_3_0_PRIME_APPLICATION = "alibaba/wan-3.0-prime/text-to-video"
+WAN_3_0_PRIME_IMAGE_TO_VIDEO_APPLICATION = "alibaba/wan-3.0-prime/image-to-video"
 SOUL_2_APPLICATION = "higgsfield-ai/soul/v2/standard"
 SOUL_STANDARD_APPLICATION = "higgsfield-ai/soul/standard"
 
@@ -105,17 +107,40 @@ WAN_3_0_PRIME_PROFILE = ModelArgumentProfile(
     sends_resolution=True,
 )
 
+WAN_3_0_PRIME_IMAGE_TO_VIDEO_PROFILE = ModelArgumentProfile(
+    min_duration_seconds=2,
+    max_duration_seconds=30,
+    audio_off_arguments=MappingProxyType({"generate_audio": False}),
+    sends_resolution=True,
+    input_image_argument="image_url",
+)
+
 MODEL_ARGUMENT_PROFILES: Mapping[str, ArgumentProfile] = MappingProxyType(
     {
         KLING_3_0_STD_APPLICATION: KLING_3_0_PROFILE,
         KLING_3_0_PRO_APPLICATION: KLING_3_0_PROFILE,
         KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION: KLING_3_0_IMAGE_TO_VIDEO_PROFILE,
+        KLING_3_0_STD_IMAGE_TO_VIDEO_APPLICATION: KLING_3_0_IMAGE_TO_VIDEO_PROFILE,
         WAN_3_0_PRIME_APPLICATION: WAN_3_0_PRIME_PROFILE,
+        WAN_3_0_PRIME_IMAGE_TO_VIDEO_APPLICATION: WAN_3_0_PRIME_IMAGE_TO_VIDEO_PROFILE,
         SOUL_2_APPLICATION: SOUL_PROFILE,
         SOUL_STANDARD_APPLICATION: SOUL_PROFILE,
     }
 )
 
 
+IMAGE_TO_VIDEO_APPLICATIONS: Mapping[str, str] = MappingProxyType(
+    {
+        KLING_3_0_STD_APPLICATION: KLING_3_0_STD_IMAGE_TO_VIDEO_APPLICATION,
+        KLING_3_0_PRO_APPLICATION: KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION,
+        WAN_3_0_PRIME_APPLICATION: WAN_3_0_PRIME_IMAGE_TO_VIDEO_APPLICATION,
+    }
+)
+
+
 def find_argument_profile(application: str) -> ArgumentProfile | None:
     return MODEL_ARGUMENT_PROFILES.get(application)
+
+
+def find_image_to_video_application(application: str) -> str | None:
+    return IMAGE_TO_VIDEO_APPLICATIONS.get(application)

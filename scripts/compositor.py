@@ -4,6 +4,8 @@ import os
 import sys
 import subprocess
 import json
+import re
+import textwrap
 from pathlib import Path
 from datetime import datetime
 
@@ -19,6 +21,31 @@ _DEFAULT_FFMPEG_TIMEOUT = int(os.getenv("JW_FFMPEG_TIMEOUT", "300"))
 LOGO_OVERLAY_WIDTH_PCT = 15
 BRAND_CARD_LOGO_WIDTH_PCT = 80
 DURATION_TOLERANCE_SECONDS = 0.25
+DEFAULT_VIDEO_WIDTH = 1080
+TEXT_FONT_WIDTH_RATIO = 0.045
+TEXT_MAX_WIDTH_RATIO = 0.86
+TEXT_AVERAGE_CHAR_EM = 0.55
+TEXT_BOTTOM_MARGIN_RATIO = 0.06
+TEXT_LINE_SPACING_RATIO = 0.25
+ALPHA_OPAQUE_LEVEL = 255
+LUMA_AVERAGE_PATTERN = re.compile(r"lavfi\.signalstats\.YAVG=([\d.]+)")
+LUMA_MAX_LEVEL = 255
+SCENE_PRODUCT_BOTTOM_RATIO = 0.86
+SCENE_PRODUCT_CENTERS = {
+    "centro": "W/2",
+    "centro_inferior": "W/2",
+    "direita": "W*0.73",
+    "esquerda": "W*0.27",
+}
+SCENE_SHADOW_OPACITY = 0.55
+SCENE_SHADOW_WIDTH_RATIO = 1.1
+SCENE_SHADOW_HEIGHT_RATIO = 0.16
+SCENE_SHADOW_BLUR_RATIO = 0.035
+SCENE_PRODUCT_MIN_GAIN = 0.8
+SCENE_PRODUCT_MAX_GAIN = 1.05
+SCENE_PRODUCT_BASE_GAIN = 0.75
+SCENE_PRODUCT_LUMA_GAIN = 0.5
+ALPHA_MIN_PATTERN = re.compile(r"lavfi\.signalstats\.YMIN=(\d+)")
 ALPHA_PIXEL_FORMATS = frozenset(
     {"rgba", "bgra", "argb", "abgr", "ya8", "ya16be", "ya16le", "rgba64be", "rgba64le", "gbrap", "pal8"}
 )
@@ -97,6 +124,31 @@ def obter_formato_imagem(image_path):
         return int(stream["width"]), str(stream["pix_fmt"])
     except (subprocess.SubprocessError, OSError, ValueError, TypeError, KeyError, IndexError):
         return None
+
+
+def imagem_tem_pixels_transparentes(image_path):
+    formato = obter_formato_imagem(image_path)
+    if formato is None:
+        return None
+    if not imagem_tem_transparencia(formato[1]):
+        return False
+    try:
+        probe = _subprocess_run(
+            [
+                "ffmpeg", "-v", "error", "-i", str(image_path),
+                "-vf", "alphaextract,signalstats,metadata=print:file=-",
+                "-f", "null", "-",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+    niveis = [int(valor) for valor in ALPHA_MIN_PATTERN.findall(probe.stdout or "")]
+    if not niveis:
+        return None
+    return min(niveis) < ALPHA_OPAQUE_LEVEL
 
 
 def imagem_tem_transparencia(pix_fmt):
@@ -303,27 +355,50 @@ def adicionar_logo_overlay(video_path, logo_path, output_path, posicao="inferior
         return output_path
 
 
+def _tamanho_fonte(largura_video):
+    return max(1, round(largura_video * TEXT_FONT_WIDTH_RATIO))
+
+
+def quebrar_texto_overlay(texto, largura_video):
+    largura_util = largura_video * TEXT_MAX_WIDTH_RATIO
+    caracteres_por_linha = max(1, int(largura_util / (_tamanho_fonte(largura_video) * TEXT_AVERAGE_CHAR_EM)))
+    return textwrap.fill(" ".join(texto.split()), width=caracteres_por_linha, break_long_words=False)
+
+
+def _escapar_valor_filtro(valor):
+    return valor.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+
+
 def adicionar_texto_overlay(video_path, texto, output_path, posicao="centro_inferior"):
     """Adiciona texto overlay ao vídeo. Retorna path ou None."""
     video_path = Path(video_path)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Escapar caracteres especiais para FFmpeg drawtext
-    texto_escaped = texto.replace("'", "\\'").replace(":", "\\:").replace("\\", "\\\\")
+    dimensoes = _obter_dimensoes_video(video_path)
+    largura_video = dimensoes[0] if dimensoes else DEFAULT_VIDEO_WIDTH
+    tamanho_fonte = _tamanho_fonte(largura_video)
+    texto_path = output_path.with_suffix(".txt")
+    texto_path.write_text(quebrar_texto_overlay(texto, largura_video), encoding="utf-8")
 
     pos_map = {
-        "centro_inferior": "x=(w-text_w)/2:y=h-text_h-80",
+        "centro_inferior": f"x=(w-text_w)/2:y=h-text_h-h*{TEXT_BOTTOM_MARGIN_RATIO}",
         "centro": "x=(w-text_w)/2:y=(h-text_h)/2",
-        "topo": "x=(w-text_w)/2:y=80",
+        "topo": f"x=(w-text_w)/2:y=h*{TEXT_BOTTOM_MARGIN_RATIO}",
     }
     xy = pos_map.get(posicao, pos_map["centro_inferior"])
+    drawtext = (
+        f"drawtext=textfile='{_escapar_valor_filtro(str(texto_path))}':expansion=none:"
+        f"text_align=center:fontsize={tamanho_fonte}:"
+        f"line_spacing={round(tamanho_fonte * TEXT_LINE_SPACING_RATIO)}:"
+        f"fontcolor=white:borderw={max(2, tamanho_fonte // 14)}:bordercolor=black:{xy}"
+    )
 
     try:
         _subprocess_run([
             "ffmpeg", "-y",
             "-i", str(video_path),
-            "-vf", f"drawtext=text='{texto_escaped}':fontsize=42:fontcolor=white:borderw=3:bordercolor=black:{xy}",
+            "-vf", drawtext,
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "copy",
             str(output_path)
@@ -332,6 +407,83 @@ def adicionar_texto_overlay(video_path, texto, output_path, posicao="centro_infe
         return output_path
     except subprocess.CalledProcessError as e:
         log(f"✗ Texto overlay falhou: {e.stderr[:200]}")
+        return None
+    finally:
+        texto_path.unlink(missing_ok=True)
+
+
+def _luminancia_media(image_path):
+    try:
+        probe = _subprocess_run(
+            [
+                "ffmpeg", "-v", "error", "-i", str(image_path),
+                "-vf", "signalstats,metadata=print:file=-",
+                "-f", "null", "-",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+    medias = [float(valor) for valor in LUMA_AVERAGE_PATTERN.findall(probe.stdout or "")]
+    if not medias:
+        return None
+    return medias[0] / LUMA_MAX_LEVEL
+
+
+def ganho_do_produto(luminancia_cena):
+    ganho = SCENE_PRODUCT_BASE_GAIN + SCENE_PRODUCT_LUMA_GAIN * luminancia_cena
+    return max(SCENE_PRODUCT_MIN_GAIN, min(ganho, SCENE_PRODUCT_MAX_GAIN))
+
+
+def compor_produto_em_cena(cena_path, output_path, produto_path, *, posicao, tamanho_pct, largura, altura):
+    """Apoia a embalagem real na superfície de uma imagem de cena, com sombra de contato."""
+    cena_path = Path(cena_path)
+    output_path = Path(output_path)
+    produto_path = Path(produto_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not cena_path.exists() or not produto_path.exists():
+        log(f"Imagem de cena ou de produto ausente ({cena_path}, {produto_path})")
+        return None
+
+    luminancia = _luminancia_media(cena_path)
+    if luminancia is None:
+        log(f"Não foi possível medir a luz da cena ({cena_path})")
+        return None
+
+    ganho = ganho_do_produto(luminancia)
+    largura_produto = max(1, round(largura * float(tamanho_pct) / 100))
+    centro_x = SCENE_PRODUCT_CENTERS.get(posicao, SCENE_PRODUCT_CENTERS["centro_inferior"])
+    base_y = f"H*{SCENE_PRODUCT_BOTTOM_RATIO}"
+    desfoque = max(1, round(largura_produto * SCENE_SHADOW_BLUR_RATIO))
+    filter_complex = ";".join(
+        (
+            f"[0:v]scale={largura}:{altura}:force_original_aspect_ratio=increase,"
+            f"crop={largura}:{altura},format=rgba[cena]",
+            f"[1:v]scale={largura_produto}:-1,format=rgba,"
+            f"lutrgb=r=val*{ganho:.3f}:g=val*{ganho:.3f}:b=val*{ganho:.3f},split=2[produto][silhueta]",
+            f"[silhueta]lutrgb=r=0:g=0:b=0,colorchannelmixer=aa={SCENE_SHADOW_OPACITY},"
+            f"scale=iw*{SCENE_SHADOW_WIDTH_RATIO}:ih*{SCENE_SHADOW_HEIGHT_RATIO},gblur=sigma={desfoque}[sombra]",
+            f"[cena][sombra]overlay=x={centro_x}-w/2:y={base_y}-h/2[com_sombra]",
+            f"[com_sombra][produto]overlay=x={centro_x}-w/2:y={base_y}-h,format=rgb24[out]",
+        )
+    )
+
+    try:
+        _subprocess_run([
+            "ffmpeg", "-y",
+            "-i", str(cena_path),
+            "-i", str(produto_path),
+            "-filter_complex", filter_complex,
+            "-map", "[out]", "-frames:v", "1",
+            str(output_path)
+        ], capture_output=True, text=True, check=True, timeout=60)
+        log(f"✓ Embalagem apoiada na cena: {output_path.name}")
+        return output_path
+    except subprocess.CalledProcessError as e:
+        log(f"✗ Composição da embalagem na cena falhou: {e.stderr[:200]}")
         return None
 
 

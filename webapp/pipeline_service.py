@@ -34,6 +34,12 @@ from scripts.integration_errors import IntegrationFailure
 from scripts.higgsfield_utils import upload_higgsfield_file
 from scripts.uploader import upload_para_drive
 from webapp.model_registry import VideoModelConfig
+from webapp.product_scene import (
+    KeyframeSpec,
+    animation_prompt,
+    render_product_keyframe,
+    shot_integrates_product,
+)
 from webapp.narration_plan import (
     BRAND_CARD_DURATION_SECONDS,
     DurationRange,
@@ -41,11 +47,21 @@ from webapp.narration_plan import (
     budget_warning,
     fit_narration_to_budget,
 )
-from webapp.schemas import CreateJobRequest, DurationLiteral, PlannerOutput
+from webapp.schemas import CreateJobRequest, DurationLiteral, PlannerOutput, PlannerShot
 
 
 ProgressCallback = Callable[[str, str], None]
 DEFAULT_SHOT_DURATION_RANGE = DurationRange(min_seconds=3, max_seconds=15)
+
+
+TEXT_POSITION_DEFAULT = "centro_inferior"
+TEXT_POSITION_ABOVE_PRODUCT = "topo"
+
+
+def _posicao_do_texto(shot: PlannerShot) -> str:
+    if shot.product_overlay.ativo and shot.product_overlay.posicao == TEXT_POSITION_DEFAULT:
+        return TEXT_POSITION_ABOVE_PRODUCT
+    return TEXT_POSITION_DEFAULT
 
 
 def _faixa_de_duracao(model_config: VideoModelConfig) -> DurationRange:
@@ -214,6 +230,61 @@ ASPECT_RATIO_BY_ORIENTATION = {
 }
 
 
+def _gerar_cena_com_produto_integrado(
+    shot: PlannerShot,
+    image_model: VideoModelConfig,
+    *,
+    produto_path: Path,
+    aspecto: str,
+    resolucao: str,
+    largura: int,
+    altura: int,
+    duracao: int,
+    base_path: Path,
+) -> Path:
+    keyframe_path = render_product_keyframe(
+        KeyframeSpec(
+            prompt=shot.visual_prompt_en,
+            aspect_ratio=aspecto,
+            width=largura,
+            height=altura,
+            product_path=produto_path,
+            position=shot.product_overlay.posicao,
+            size_pct=shot.product_overlay.tamanho_pct,
+            output_dir=base_path.parent,
+            name=base_path.name,
+        )
+    )
+    keyframe_url = _upload_reference_image(keyframe_path)
+    if not keyframe_url:
+        raise IntegrationFailure(
+            service="higgsfield",
+            stage="uploading_keyframe",
+            code="keyframe_upload_failed",
+            user_message="Não foi possível enviar a imagem-base da cena com produto.",
+            technical_message=f"upload failed for {keyframe_path}",
+        )
+    video_path = _gerar_video_com_fallback(
+        image_model,
+        animation_prompt(shot.visual_prompt_en),
+        aspecto=aspecto,
+        resolucao=resolucao,
+        duracao=duracao,
+        output_path=f"{base_path}.mp4",
+        reference_image_url=keyframe_url,
+        extra_arguments=image_model.default_arguments,
+    )
+    if not video_path:
+        raise IntegrationFailure(
+            service="higgsfield",
+            stage="generating",
+            code="no_output",
+            user_message="A Higgsfield não entregou a cena com produto.",
+            technical_message=f"{image_model.application} returned no video",
+        )
+    return Path(video_path)
+
+
 def _upload_reference_image(image_path: str | Path | None) -> str | None:
     """Upload a reference image to Higgsfield and return its URL.
 
@@ -347,6 +418,10 @@ def render_planned_video(
     if ref_embalagem_path and Path(ref_embalagem_path).exists():
         produto_overlay_path = Path(ref_embalagem_path)
 
+    image_model = model_config.image_to_video()
+    produto_padrao = obter_path_imagem_produto()
+    produto_da_cena = produto_overlay_path or (Path(produto_padrao) if produto_padrao else None)
+
     card_image_path = _imagem_do_cartao(ref_logo_path, ref_embalagem_path)
     card_duration = BRAND_CARD_DURATION_SECONDS if card_image_path else 0
 
@@ -404,18 +479,50 @@ def render_planned_video(
             )
 
         base_path = cenas_dir / f"shot_{shot.shot_number:02d}"
-        video_path = _gerar_video_com_fallback(
-            model_config,
-            shot.visual_prompt_en,
-            aspecto=aspect_ratio,
-            resolucao=request.resolution,
-            duracao=narracao.shot_durations[shot_index],
-            output_path=f"{base_path}.mp4",
-            reference_image_url=reference_image_url if should_use_reference else None,
-            extra_arguments=model_config.default_arguments,
+        produto_integrado = (
+            image_model is not None
+            and produto_da_cena is not None
+            and produto_da_cena.exists()
+            and shot_integrates_product(shot)
         )
-        if not video_path:
-            raise RuntimeError(
+        video_path = None
+        if produto_integrado:
+            if progress_cb:
+                progress_cb(
+                    "generating",
+                    f"Gerando cena {shot.shot_number}/{total_shots} com a embalagem na cena: {plan.title}",
+                )
+            try:
+                video_path = _gerar_cena_com_produto_integrado(
+                    shot,
+                    image_model,
+                    produto_path=produto_da_cena,
+                    aspecto=aspect_ratio,
+                    resolucao=request.resolution,
+                    largura=largura,
+                    altura=altura,
+                    duracao=narracao.shot_durations[shot_index],
+                    base_path=base_path,
+                )
+            except IntegrationFailure as failure:
+                warnings.append(
+                    f"Cena {shot.shot_number}: não foi possível colocar a embalagem dentro da cena "
+                    f"({failure.code}); ela foi sobreposta ao vídeo."
+                )
+                produto_integrado = False
+
+        if video_path is None:
+            video_path = _gerar_video_com_fallback(
+                model_config,
+                shot.visual_prompt_en,
+                aspecto=aspect_ratio,
+                resolucao=request.resolution,
+                duracao=narracao.shot_durations[shot_index],
+                output_path=f"{base_path}.mp4",
+                reference_image_url=reference_image_url if should_use_reference else None,
+                extra_arguments=model_config.default_arguments,
+            )
+        if not video_path:            raise RuntimeError(
                 f"Falha na geração da cena {shot.shot_number} usando {model_config.label}."
             )
 
@@ -437,7 +544,7 @@ def render_planned_video(
                 )
             current_video_path = Path(combined_path)
 
-        if shot.product_overlay.ativo:
+        if shot.product_overlay.ativo and not produto_integrado:
             overlay_path = overlay_produto(
                 current_video_path,
                 f"{base_path}_produto.mp4",
@@ -461,7 +568,7 @@ def render_planned_video(
                 current_video_path,
                 shot.overlay_text,
                 f"{base_path}_texto.mp4",
-                "centro_inferior",
+                _posicao_do_texto(shot),
             )
             if text_path:
                 current_video_path = Path(text_path)

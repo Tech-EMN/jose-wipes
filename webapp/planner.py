@@ -24,7 +24,13 @@ from scripts.product_reference import (
 )
 from webapp.model_registry import VideoModelConfig
 from webapp.narration_plan import BRAND_CARD_DURATION_SECONDS, NARRATION_TAIL_SECONDS
-from webapp.schemas import CreateJobRequest, PlannerOutput, PlannerShot, ProductOverlayConfig
+from webapp.schemas import (
+    CreateJobRequest,
+    PlannerCharacter,
+    PlannerOutput,
+    PlannerShot,
+    ProductOverlayConfig,
+)
 
 
 PLANNER_MODEL = OPENAI_PLANNER_MODEL
@@ -58,6 +64,10 @@ NO_TEXT_VISUAL_CONSTRAINT = (
 NO_NARRATION_VISUAL_CONSTRAINT = (
     "Ambient sound only. No narration, voice-over, dialogue, vocals, or human speech."
 )
+CONTINUOUS_TAKE_VISUAL_CONSTRAINT = (
+    "One continuous take with no cuts, no scene changes, and no person changing appearance during the shot."
+)
+CAST_PROMPT_PREFIX = "Recurring characters, identical in every shot"
 PRODUCT_COMPOSITING_VISUAL_CONSTRAINT = (
     "The placement area is reserved for post-production compositing. Render only "
     "the surrounding scene, background, lighting, and shadows with a locked-off "
@@ -171,6 +181,21 @@ def _briefing_proibe_narracao(*texts: str | None) -> bool:
 
 def _tamanho_overlay_padrao(tamanho_pct: int) -> int:
     return max(PRODUCT_OVERLAY_MIN_PCT, min(tamanho_pct, PRODUCT_OVERLAY_MAX_PCT))
+
+
+def _fixar_elenco_e_tomada(shot: PlannerShot, cast: list[PlannerCharacter]) -> PlannerShot:
+    descriptions = {character.character_id: character.description_en for character in cast}
+    present = [
+        f"{character_id}: {descriptions[character_id].rstrip('.')}"
+        for character_id in shot.characters
+        if character_id in descriptions
+    ]
+    parts = [shot.visual_prompt_en.rstrip()]
+    if present:
+        parts.insert(0, f"{CAST_PROMPT_PREFIX}. {'; '.join(present)}.")
+    if CONTINUOUS_TAKE_VISUAL_CONSTRAINT not in shot.visual_prompt_en:
+        parts.append(CONTINUOUS_TAKE_VISUAL_CONSTRAINT)
+    return shot.model_copy(update={"visual_prompt_en": " ".join(parts)})
 
 
 def _preparar_prompt_para_composicao(
@@ -486,6 +511,12 @@ def plan_web_video(
             "global_style": "string",
             "final_cta_pt": "string",
             "notes": "string",
+            "cast": [
+                {
+                    "character_id": "joao",
+                    "description_en": "Brazilian man, 40s, medium-brown skin, short black hair, trimmed beard, stocky build, faded navy t-shirt",
+                }
+            ],
             "shots": [
                 {
                     "shot_number": 1,
@@ -493,6 +524,7 @@ def plan_web_video(
                     "duration_seconds": 5,
                     "narration_text_pt": "string",
                     "voice_persona": "narrador|joao|lider|amigo",
+                    "characters": ["joao"],
                     "overlay_text": "string|null",
                     "product_overlay": {
                         "ativo": True,
@@ -615,6 +647,10 @@ def plan_web_video(
                 for shot in plan.shots
             ]
         }
+    )
+
+    plan = plan.model_copy(
+        update={"shots": [_fixar_elenco_e_tomada(shot, plan.cast) for shot in plan.shots]}
     )
 
     return plan
