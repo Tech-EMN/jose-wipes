@@ -23,7 +23,7 @@ from scripts.product_reference import (
     prompt_pede_referencia_produto,
 )
 from webapp.model_registry import VideoModelConfig
-from webapp.narration_plan import BRAND_CARD_DURATION_SECONDS, NARRATION_TAIL_SECONDS
+from webapp.narration_plan import BRAND_CARD_DURATION_SECONDS, NARRATION_TAIL_SECONDS, strip_speaker_labels
 from webapp.schemas import (
     CreateJobRequest,
     PlannerCharacter,
@@ -588,7 +588,7 @@ def plan_web_video(
                 update={
                     "shot_number": index,
                     "duration_seconds": SHOT_BLOCK_SECONDS,
-                    "narration_text_pt": "" if narration_forbidden else shot.narration_text_pt,
+                    "narration_text_pt": "" if narration_forbidden else strip_speaker_labels(shot.narration_text_pt),
                     "visual_prompt_en": visual_prompt,
                     "overlay_text": None if text_overlay_forbidden else shot.overlay_text,
                 }
