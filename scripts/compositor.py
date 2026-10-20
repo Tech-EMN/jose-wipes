@@ -45,6 +45,14 @@ SCENE_PRODUCT_MIN_GAIN = 0.8
 SCENE_PRODUCT_MAX_GAIN = 1.05
 SCENE_PRODUCT_BASE_GAIN = 0.75
 SCENE_PRODUCT_LUMA_GAIN = 0.5
+VIDEO_LUMA_BLACK = 16
+VIDEO_LUMA_WHITE = 235
+MARK_OVER_BLACK_FILTER = "format=rgba,premultiply=inplace=1"
+MARK_INVERTED_OVER_BLACK_FILTER = "format=rgba,negate,premultiply=inplace=1"
+MIN_MARK_COVERAGE = 0.01
+LIGHT_MARK_LUMA = 0.6
+CARD_BACKGROUND_LIGHT = "white"
+CARD_BACKGROUND_DARK = "0x111111"
 ALPHA_MIN_PATTERN = re.compile(r"lavfi\.signalstats\.YMIN=(\d+)")
 ALPHA_PIXEL_FORMATS = frozenset(
     {"rgba", "bgra", "argb", "abgr", "ya8", "ya16be", "ya16le", "rgba64be", "rgba64le", "gbrap", "pal8"}
@@ -412,12 +420,13 @@ def adicionar_texto_overlay(video_path, texto, output_path, posicao="centro_infe
         texto_path.unlink(missing_ok=True)
 
 
-def _luminancia_media(image_path):
+def _media_y(image_path, filtro=None):
+    cadeia = f"{filtro}," if filtro else ""
     try:
         probe = _subprocess_run(
             [
                 "ffmpeg", "-v", "error", "-i", str(image_path),
-                "-vf", "signalstats,metadata=print:file=-",
+                "-vf", f"{cadeia}signalstats,metadata=print:file=-",
                 "-f", "null", "-",
             ],
             capture_output=True,
@@ -429,7 +438,38 @@ def _luminancia_media(image_path):
     medias = [float(valor) for valor in LUMA_AVERAGE_PATTERN.findall(probe.stdout or "")]
     if not medias:
         return None
-    return medias[0] / LUMA_MAX_LEVEL
+    return medias[0]
+
+
+def _luminancia_media(image_path):
+    media = _media_y(image_path)
+    if media is None:
+        return None
+    return media / LUMA_MAX_LEVEL
+
+
+def _nivel_de_video(media):
+    return max(0.0, min(1.0, (media - VIDEO_LUMA_BLACK) / (VIDEO_LUMA_WHITE - VIDEO_LUMA_BLACK)))
+
+
+def brilho_da_marca(image_path):
+    sobre_preto = _media_y(image_path, MARK_OVER_BLACK_FILTER)
+    invertida_sobre_preto = _media_y(image_path, MARK_INVERTED_OVER_BLACK_FILTER)
+    if sobre_preto is None or invertida_sobre_preto is None:
+        return None
+    brilho_sobre_preto = _nivel_de_video(sobre_preto)
+    brilho_sobre_branco = 1.0 - _nivel_de_video(invertida_sobre_preto)
+    cobertura = 1.0 - (brilho_sobre_branco - brilho_sobre_preto)
+    if cobertura < MIN_MARK_COVERAGE:
+        return None
+    return min(1.0, brilho_sobre_preto / cobertura)
+
+
+def cor_de_fundo_do_cartao(image_path):
+    brilho = brilho_da_marca(image_path)
+    if brilho is not None and brilho >= LIGHT_MARK_LUMA:
+        return CARD_BACKGROUND_DARK
+    return CARD_BACKGROUND_LIGHT
 
 
 def ganho_do_produto(luminancia_cena):

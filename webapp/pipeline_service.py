@@ -12,6 +12,7 @@ from scripts.compositor import (
     adicionar_logo_overlay,
     adicionar_texto_overlay,
     compor_video_final,
+    cor_de_fundo_do_cartao,
     gerar_card_logo,
     imagem_tem_transparencia,
     obter_formato_imagem,
@@ -602,6 +603,7 @@ def render_planned_video(
             duracao=BRAND_CARD_DURATION_SECONDS,
             largura=largura,
             altura=altura,
+            fundo=cor_de_fundo_do_cartao(card_image_path),
         )
         if card_video:
             rendered_scenes.append(str(card_video))
