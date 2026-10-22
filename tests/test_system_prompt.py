@@ -5,8 +5,8 @@ import json
 sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
-from scripts.config import OPENAI_API_KEY, OPENAI_PLANNER_MODEL
-from scripts.openai_utils import create_text_response
+from jose_wipes.config import OPENAI_API_KEY, OPENAI_PLANNER_MODEL
+from jose_wipes.integrations.openai_utils import create_text_response
 
 
 def main():
@@ -17,7 +17,7 @@ def main():
     # [1/2] Montar prompt
     print("\n[1/2] Montando system prompt...")
     try:
-        from scripts.system_prompt import montar_system_prompt, info_prompt
+        from jose_wipes.planning.system_prompt import montar_system_prompt, info_prompt
         prompt = montar_system_prompt()
         chars = len(prompt)
         tokens = chars // 4

@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.higgsfield_model_profiles import (
+from jose_wipes.integrations.higgsfield_model_profiles import (
     KLING_3_0_PRO_APPLICATION,
     KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION,
     KLING_3_0_STD_APPLICATION,

@@ -10,9 +10,9 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from jose_wipes.runtime_state import mark_external_connectivity_checked
 from scripts.web_server import (
     get_web_server_status,
-    mark_external_connectivity_checked,
     start_web_server,
     stop_web_server,
 )

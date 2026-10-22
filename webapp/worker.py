@@ -23,8 +23,8 @@ _project_root = Path(__file__).parent.parent.resolve()
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from scripts.config import OUTPUT_DIR, LOGS_DIR, OPENAI_PLANNER_MODEL
-from webapp.job_manager import FilePollingJobManager
+from jose_wipes.config import OUTPUT_DIR, LOGS_DIR, OPENAI_PLANNER_MODEL
+from jose_wipes.jobs.job_manager import FilePollingJobManager
 
 _log = logging.getLogger("jose-wipes-worker")
 
@@ -46,7 +46,7 @@ def start_cleanup_scheduler(jobs_dir: Path) -> None:
 
     def _cleanup_loop():
         import time as _time
-        from scripts.cleanup_retention import (
+        from jose_wipes.retention import (
             collect_candidates,
             delete_candidates,
             DEFAULT_JOB_DAYS,

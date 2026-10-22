@@ -10,8 +10,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from openai import APIConnectionError, RateLimitError
 
-from scripts.integration_errors import IntegrationFailure, classify_higgsfield_exception
-from scripts.openai_utils import classify_openai_exception, create_text_response
+from jose_wipes.integrations.errors import IntegrationFailure, classify_higgsfield_exception
+from jose_wipes.integrations.openai_utils import classify_openai_exception, create_text_response
 
 
 class FakeResponses:

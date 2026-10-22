@@ -6,7 +6,7 @@ import tempfile
 from enum import Enum
 from pathlib import Path
 
-from scripts.compositor import imagem_tem_pixels_transparentes
+from jose_wipes.composition.compositor import imagem_tem_pixels_transparentes
 
 DEFAULT_IMAGE_SUFFIX = ".png"
 

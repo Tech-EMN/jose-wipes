@@ -10,16 +10,16 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.config import OUTPUT_DIR
-from scripts.health_check import (
+from jose_wipes.config import OUTPUT_DIR
+from jose_wipes.integrations.health_check import (
     check_elevenlabs,
     check_ffmpeg,
     check_higgsfield,
     check_openai,
 )
-from scripts.integration_errors import classify_higgsfield_exception
-from webapp.model_registry import VIDEO_MODEL_REGISTRY
-from webapp.schemas import ExternalHealthResponse, ExternalServiceHealth
+from jose_wipes.integrations.errors import classify_higgsfield_exception
+from jose_wipes.model_registry import VIDEO_MODEL_REGISTRY
+from jose_wipes.schemas import ExternalHealthResponse, ExternalServiceHealth
 
 logger = logging.getLogger(__name__)
 

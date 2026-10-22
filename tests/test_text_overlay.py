@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from scripts.compositor import adicionar_texto_overlay, quebrar_texto_overlay
-from webapp.pipeline_service import _posicao_do_texto
-from webapp.schemas import PlannerShot, ProductOverlayConfig
+from jose_wipes.composition.compositor import adicionar_texto_overlay, quebrar_texto_overlay
+from jose_wipes.rendering.pipeline_service import _posicao_do_texto
+from jose_wipes.schemas import PlannerShot, ProductOverlayConfig
 
 LONG_TEXT = "Sem fragrância. Sem cheirinho. Apenas para homens que levam a limpeza a sério: 100% José Wipes!"
 EDGE_COLUMNS = 24

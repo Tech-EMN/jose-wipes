@@ -7,7 +7,7 @@ import logging
 import pytest
 from pathlib import Path
 
-from scripts.logging_config import (
+from jose_wipes.logging_config import (
     JsonFormatter,
     PlainFormatter,
     JobLogAdapter,

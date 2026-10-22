@@ -6,13 +6,13 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
-from scripts.higgsfield_model_profiles import (
+from jose_wipes.integrations.higgsfield_model_profiles import (
     KLING_3_0_PRO_APPLICATION,
     KLING_3_0_STD_APPLICATION,
     WAN_3_0_PRIME_APPLICATION,
     find_image_to_video_application,
 )
-from webapp.schemas import ResolutionLiteral, VideoModelLiteral
+from jose_wipes.schemas import ResolutionLiteral, VideoModelLiteral
 
 
 @dataclass(frozen=True)

@@ -5,14 +5,14 @@ from unittest.mock import patch
 
 import pytest
 
-from scripts.compositor import (
+from jose_wipes.composition.compositor import (
     adicionar_logo_overlay,
     compor_produto_na_imagem,
     imagem_tem_transparencia,
     obter_formato_imagem,
 )
-from webapp.pipeline_service import _avisos_qualidade_imagem, _imagens_da_marca
-from webapp.schemas import PlannerOutput, PlannerShot, ProductOverlayConfig
+from jose_wipes.rendering.pipeline_service import _avisos_qualidade_imagem, _imagens_da_marca
+from jose_wipes.schemas import PlannerOutput, PlannerShot, ProductOverlayConfig
 
 FFPROBE_AVAILABLE = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 
@@ -32,8 +32,8 @@ def test_logo_watermark_scales_with_video_width(tmp_path: Path, video_dimensions
     video_path.write_bytes(b"video")
     logo_path.write_bytes(b"logo")
 
-    with patch("scripts.compositor._obter_dimensoes_video", return_value=video_dimensions), patch(
-        "scripts.compositor._subprocess_run"
+    with patch("jose_wipes.composition.compositor._obter_dimensoes_video", return_value=video_dimensions), patch(
+        "jose_wipes.composition.compositor._subprocess_run"
     ) as subprocess_mock:
         adicionar_logo_overlay(video_path, logo_path, tmp_path / "out.mp4")
 
@@ -47,8 +47,8 @@ def test_logo_watermark_is_skipped_when_video_cannot_be_measured(tmp_path: Path)
     video_path.write_bytes(b"video")
     logo_path.write_bytes(b"logo")
 
-    with patch("scripts.compositor._obter_dimensoes_video", return_value=None), patch(
-        "scripts.compositor._subprocess_run"
+    with patch("jose_wipes.composition.compositor._obter_dimensoes_video", return_value=None), patch(
+        "jose_wipes.composition.compositor._subprocess_run"
     ) as subprocess_mock:
         result = adicionar_logo_overlay(video_path, logo_path, output_path)
 
@@ -63,8 +63,8 @@ def test_product_in_scene_image_scales_with_scene_width(tmp_path: Path) -> None:
     scene_path.write_bytes(b"scene")
     product_path.write_bytes(b"product")
 
-    with patch("scripts.compositor._obter_dimensoes_video", return_value=(1080, 1920)), patch(
-        "scripts.compositor._subprocess_run"
+    with patch("jose_wipes.composition.compositor._obter_dimensoes_video", return_value=(1080, 1920)), patch(
+        "jose_wipes.composition.compositor._subprocess_run"
     ) as subprocess_mock:
         compor_produto_na_imagem(scene_path, tmp_path / "out.png", produto_path=product_path, tamanho_pct=30)
 
@@ -113,7 +113,7 @@ def test_unreadable_image_format_returns_none(tmp_path: Path) -> None:
     ],
 )
 def test_brand_image_quality_warnings(tmp_path: Path, formato, expected_count, expected_fragments) -> None:
-    with patch("webapp.pipeline_service.obter_formato_imagem", return_value=formato):
+    with patch("jose_wipes.rendering.pipeline_service.obter_formato_imagem", return_value=formato):
         avisos = _avisos_qualidade_imagem("embalagem", tmp_path / "embalagem.png", 864)
 
     assert len(avisos) == expected_count
@@ -122,7 +122,7 @@ def test_brand_image_quality_warnings(tmp_path: Path, formato, expected_count, e
 
 
 def test_unanalyzable_brand_image_is_reported(tmp_path: Path) -> None:
-    with patch("webapp.pipeline_service.obter_formato_imagem", return_value=None):
+    with patch("jose_wipes.rendering.pipeline_service.obter_formato_imagem", return_value=None):
         avisos = _avisos_qualidade_imagem("logo", tmp_path / "logo.png", 162)
 
     assert avisos == ["Não foi possível analisar a imagem de logo (logo.png)."]
@@ -163,7 +163,7 @@ def test_brand_images_use_largest_displayed_width(tmp_path: Path) -> None:
 def test_default_product_is_checked_only_when_an_overlay_is_used(tmp_path: Path) -> None:
     default_product = tmp_path / "default.png"
 
-    with patch("webapp.pipeline_service.obter_path_imagem_produto", return_value=default_product):
+    with patch("jose_wipes.rendering.pipeline_service.obter_path_imagem_produto", return_value=default_product):
         with_overlay = _imagens_da_marca(
             _plan(50), largura_video=720, produto_overlay_path=None, logo_path=None, card_image_path=None
         )

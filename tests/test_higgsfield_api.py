@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import patch
 
 from higgsfield_client import HiggsfieldClientError
-from scripts.higgsfield_api import (
+from jose_wipes.integrations.higgsfield_api import (
     HiggsfieldApiError,
     HiggsfieldAuthOutcome,
     HiggsfieldRequestStatus,
@@ -11,7 +11,7 @@ from scripts.higgsfield_api import (
     fetch_request_status,
     probe_higgsfield_auth,
 )
-from scripts.integration_errors import classify_higgsfield_exception
+from jose_wipes.integrations.errors import classify_higgsfield_exception
 
 STATUS_URL = "https://api.higgsfield.ai/requests/request-1/status"
 
@@ -30,7 +30,7 @@ def _sdk_error(status_code: int, detail: object) -> HiggsfieldClientError:
 
 def test_fetch_request_status_keeps_failure_payload() -> None:
     payload = {"status": "failed", "error": {"message": "Prompt rejected by provider"}}
-    with patch("scripts.higgsfield_api._get", return_value=_response(200, payload)):
+    with patch("jose_wipes.integrations.higgsfield_api._get", return_value=_response(200, payload)):
         snapshot = fetch_request_status(STATUS_URL)
 
     assert snapshot.status is HiggsfieldRequestStatus.FAILED
@@ -39,7 +39,7 @@ def test_fetch_request_status_keeps_failure_payload() -> None:
 
 
 def test_fetch_request_status_maps_unknown_status_without_raising() -> None:
-    with patch("scripts.higgsfield_api._get", return_value=_response(200, {"status": "rendering"})):
+    with patch("jose_wipes.integrations.higgsfield_api._get", return_value=_response(200, {"status": "rendering"})):
         snapshot = fetch_request_status(STATUS_URL)
 
     assert snapshot.status is HiggsfieldRequestStatus.UNKNOWN
@@ -49,7 +49,7 @@ def test_fetch_request_status_maps_unknown_status_without_raising() -> None:
 
 def test_fetch_request_status_raises_with_http_status_and_detail() -> None:
     with patch(
-        "scripts.higgsfield_api._get",
+        "jose_wipes.integrations.higgsfield_api._get",
         return_value=_response(401, {"detail": "Invalid API key"}),
     ), pytest.raises(HiggsfieldApiError) as captured:
         fetch_request_status(STATUS_URL)
@@ -81,7 +81,7 @@ def test_failure_detail_falls_back_to_serialized_payload() -> None:
 )
 def test_auth_probe_maps_http_status(status_code: int, expected: HiggsfieldAuthOutcome) -> None:
     with patch(
-        "scripts.higgsfield_api._get",
+        "jose_wipes.integrations.higgsfield_api._get",
         return_value=_response(status_code, {"detail": "provider says"}),
     ):
         result = probe_higgsfield_auth()
@@ -92,7 +92,7 @@ def test_auth_probe_maps_http_status(status_code: int, expected: HiggsfieldAuthO
 
 def test_auth_probe_reports_network_failure() -> None:
     with patch(
-        "scripts.higgsfield_api._get",
+        "jose_wipes.integrations.higgsfield_api._get",
         side_effect=httpx.ConnectError("Network is unreachable"),
     ):
         result = probe_higgsfield_auth()
@@ -139,7 +139,7 @@ def test_invalid_arguments_keeps_validation_detail_in_technical_message() -> Non
 
 def test_fetch_request_status_resolves_relative_status_url() -> None:
     with patch(
-        "scripts.higgsfield_api._get",
+        "jose_wipes.integrations.higgsfield_api._get",
         return_value=_response(200, {"status": "queued"}),
     ) as get:
         fetch_request_status("/requests/request-1/status")

@@ -1,6 +1,6 @@
 """Linha de comando do Studio: roda um vídeo pelo mesmo caminho da web.
 
-Moderação, planner (OpenAI) e render (``webapp.pipeline_service``) são os
+Moderação, planner (OpenAI) e render (``jose_wipes.rendering.pipeline_service``) são os
 mesmos usados em produção; o job fica em ``output/web_jobs`` como os da web.
 
 Exemplos:
@@ -22,9 +22,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from webapp.job_manager import JobManager, ProgressListener
-from webapp.moderation import moderate_prompt_sync
-from webapp.schemas import (
+from jose_wipes.jobs.job_manager import JobManager, ProgressListener
+from jose_wipes.moderation import moderate_prompt_sync
+from jose_wipes.schemas import (
     CreateJobRequest,
     DurationLiteral,
     JobStatusResponse,

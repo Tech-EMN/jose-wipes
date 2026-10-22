@@ -7,8 +7,8 @@ import os
 import tempfile
 from pathlib import Path
 
-from scripts.config import GOOGLE_OAUTH_CLIENT_FILE, GOOGLE_OAUTH_TOKEN_FILE
-from scripts.uploader import DRIVE_SCOPE, load_oauth_credentials, resolve_config_path
+from jose_wipes.config import GOOGLE_OAUTH_CLIENT_FILE, GOOGLE_OAUTH_TOKEN_FILE
+from jose_wipes.integrations.uploader import DRIVE_SCOPE, load_oauth_credentials, resolve_config_path
 
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"

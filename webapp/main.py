@@ -7,17 +7,17 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from scripts.config import PROJECT_ROOT, LOGS_DIR, OPENAI_PLANNER_MODEL
-from scripts.logging_config import configure_logging
-from scripts.external_health import probe_external_health
-from scripts.web_server import get_web_server_status, mark_external_connectivity_checked
+from jose_wipes.config import PROJECT_ROOT, LOGS_DIR, OPENAI_PLANNER_MODEL
+from jose_wipes.logging_config import configure_logging
+from jose_wipes.integrations.external_health import probe_external_health
+from jose_wipes.runtime_state import mark_external_connectivity_checked, read_runtime
 from webapp.auth import AuthMiddleware
-from webapp.job_manager import JobManager
-from webapp.moderation import moderate_prompt_sync
+from jose_wipes.jobs.job_manager import JobManager
+from jose_wipes.moderation import moderate_prompt_sync
 from webapp.rate_limit import RateLimitMiddleware
-from webapp.pdf_utils import MAX_PDF_BYTES
-from webapp.reference_images import TransparencyCheck, check_transparency
-from webapp.schemas import CreateJobRequest
+from jose_wipes.pdf_utils import MAX_PDF_BYTES
+from jose_wipes.composition.reference_images import TransparencyCheck, check_transparency
+from jose_wipes.schemas import CreateJobRequest
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB per image
 RECENT_JOBS_DEFAULT_LIMIT = 20
@@ -89,7 +89,7 @@ def index(request: Request) -> HTMLResponse:
 def get_external_health() -> JSONResponse:
     """Return structured external connectivity for the UI."""
 
-    runtime_status = get_web_server_status(check_http=False)
+    runtime_status = read_runtime()
     payload = probe_external_health(
         startup_mode=runtime_status.get("startup_mode"),
         external_connectivity_checked=runtime_status.get("external_connectivity_checked"),

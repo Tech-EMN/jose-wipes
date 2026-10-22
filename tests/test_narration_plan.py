@@ -4,10 +4,10 @@ from unittest.mock import patch
 
 import pytest
 
-from scripts.compositor import compor_video_final
-from scripts.gerador_midia import combinar_video_audio
-from webapp.model_registry import get_model_config
-from webapp.narration_plan import (
+from jose_wipes.composition.compositor import compor_video_final
+from jose_wipes.integrations.gerador_midia import combinar_video_audio
+from jose_wipes.model_registry import get_model_config
+from jose_wipes.planning.narration_plan import (
     DurationRange,
     NarrationClip,
     budget_warning,
@@ -15,8 +15,8 @@ from webapp.narration_plan import (
     shot_duration_for,
     split_sentences,
 )
-from webapp.pipeline_service import _faixa_de_duracao, render_planned_video
-from webapp.schemas import CreateJobRequest, PlannerOutput, PlannerShot
+from jose_wipes.rendering.pipeline_service import _faixa_de_duracao, render_planned_video
+from jose_wipes.schemas import CreateJobRequest, PlannerOutput, PlannerShot
 
 KLING_RANGE = DurationRange(min_seconds=3, max_seconds=15)
 SECONDS_PER_WORD = 0.5
@@ -137,8 +137,8 @@ def test_duration_range_is_the_intersection_of_primary_and_fallback_models() -> 
 
 
 def test_long_narration_is_never_truncated_when_combined() -> None:
-    with patch("scripts.gerador_midia._probe_duration_seconds", side_effect=[4.0, 7.5]), patch(
-        "scripts.gerador_midia._subprocess_run"
+    with patch("jose_wipes.integrations.gerador_midia._probe_duration_seconds", side_effect=[4.0, 7.5]), patch(
+        "jose_wipes.integrations.gerador_midia._subprocess_run"
     ) as run_mock:
         combinar_video_audio("video.mp4", "audio.mp3", "out.mp4")
 
@@ -162,19 +162,19 @@ def _probe(duration: float) -> object:
 def _compose(tmp_path: Path, probed_duration: float):
     final_path = tmp_path / "final" / "result.mp4"
     with patch(
-        "scripts.compositor.normalizar_cena",
+        "jose_wipes.composition.compositor.normalizar_cena",
         side_effect=[tmp_path / "scene.mp4", tmp_path / "card.mp4"],
     ), patch(
-        "scripts.compositor.concatenar_cenas",
+        "jose_wipes.composition.compositor.concatenar_cenas",
         side_effect=lambda _scenes, output: Path(output),
     ), patch(
-        "scripts.compositor._limitar_duracao",
+        "jose_wipes.composition.compositor._limitar_duracao",
         side_effect=lambda path, _duration: Path(path),
     ) as limiter_mock, patch(
-        "scripts.compositor.adicionar_logo_overlay",
+        "jose_wipes.composition.compositor.adicionar_logo_overlay",
         return_value=final_path,
     ), patch(
-        "scripts.compositor._subprocess_run",
+        "jose_wipes.composition.compositor._subprocess_run",
         return_value=_probe(probed_duration),
     ):
         result = compor_video_final(
@@ -231,13 +231,13 @@ def test_render_generates_narration_before_video_and_sizes_shots_from_it(tmp_pat
         events.append(f"video:{kwargs['duracao']}")
         return tmp_path / "generated.mp4"
 
-    with patch("webapp.pipeline_service.gerar_audio_elevenlabs", side_effect=fake_audio), patch(
-        "webapp.pipeline_service.medir_duracao_segundos", side_effect=[3.1, 2.2]
-    ), patch("webapp.pipeline_service._gerar_video_com_fallback", side_effect=fake_video), patch(
-        "webapp.pipeline_service.combinar_video_audio", side_effect=lambda _v, _a, out: out
-    ), patch("webapp.pipeline_service.obter_path_imagem_produto", return_value=None), patch(
-        "webapp.pipeline_service.compor_video_final", return_value=final_path
-    ), patch("webapp.pipeline_service.upload_para_drive", return_value={"id": "1", "link": "l"}):
+    with patch("jose_wipes.rendering.pipeline_service.gerar_audio_elevenlabs", side_effect=fake_audio), patch(
+        "jose_wipes.rendering.pipeline_service.medir_duracao_segundos", side_effect=[3.1, 2.2]
+    ), patch("jose_wipes.rendering.pipeline_service._gerar_video_com_fallback", side_effect=fake_video), patch(
+        "jose_wipes.rendering.pipeline_service.combinar_video_audio", side_effect=lambda _v, _a, out: out
+    ), patch("jose_wipes.rendering.pipeline_service.obter_path_imagem_produto", return_value=None), patch(
+        "jose_wipes.rendering.pipeline_service.compor_video_final", return_value=final_path
+    ), patch("jose_wipes.rendering.pipeline_service.upload_para_drive", return_value={"id": "1", "link": "l"}):
         result = render_planned_video(
             job_dir=tmp_path / "job",
             request=CreateJobRequest(

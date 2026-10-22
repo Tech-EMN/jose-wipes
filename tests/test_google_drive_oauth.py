@@ -2,7 +2,7 @@ import os
 import stat
 from unittest.mock import MagicMock, patch
 
-from scripts import uploader
+from jose_wipes.integrations import uploader
 from scripts.google_drive_auth import _write_oauth_token
 
 

@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from webapp.schemas import JobStatusResponse
+from jose_wipes.schemas import JobStatusResponse
 
 
 class TestSSEStreaming:

@@ -8,9 +8,9 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.integration_errors import IntegrationFailure
-from webapp.job_manager import JobManager
-from webapp.schemas import CreateJobRequest, PlannerOutput, PlannerShot, ProductOverlayConfig
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.jobs.job_manager import JobManager
+from jose_wipes.schemas import CreateJobRequest, PlannerOutput, PlannerShot, ProductOverlayConfig
 
 
 def fake_planner(request, pdf_text, model_config, *, artifacts_dir=None):

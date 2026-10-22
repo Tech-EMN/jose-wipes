@@ -42,7 +42,7 @@ class TestExternalPromptFile:
 
     def test_prompt_format_succeeds(self):
         """Formatting the prompt with all required params should succeed."""
-        from webapp.planner import _planner_system_prompt
+        from jose_wipes.planning.planner import _planner_system_prompt
 
         # Should not raise
         result = _planner_system_prompt(orientation="vertical")
@@ -62,7 +62,7 @@ class TestExternalPromptFile:
 
     def test_prompt_horizontal_differs_from_vertical(self):
         """Vertical and horizontal prompts should produce different output."""
-        from webapp.planner import _planner_system_prompt
+        from jose_wipes.planning.planner import _planner_system_prompt
 
         vertical = _planner_system_prompt(orientation="vertical")
         horizontal = _planner_system_prompt(orientation="horizontal")
@@ -77,7 +77,7 @@ class TestPromptHash:
 
     def test_hash_function_returns_string(self):
         """_prompt_content_hash should return a string."""
-        from webapp.planner import _prompt_content_hash
+        from jose_wipes.planning.planner import _prompt_content_hash
 
         h = _prompt_content_hash()
         assert isinstance(h, str)
@@ -85,7 +85,7 @@ class TestPromptHash:
 
     def test_hash_is_deterministic(self):
         """Same prompt content should produce the same hash."""
-        from webapp.planner import _prompt_content_hash
+        from jose_wipes.planning.planner import _prompt_content_hash
 
         h1 = _prompt_content_hash()
         h2 = _prompt_content_hash()
@@ -97,7 +97,7 @@ class TestPromptHash:
         prompt_path = tmp_path / "planner_system_prompt.txt"
         prompt_path.write_text("Test prompt version 1")
         monkeypatch.setattr(
-            "webapp.planner._prompt_content_hash",
+            "jose_wipes.planning.planner._prompt_content_hash",
             lambda: hashlib.sha256(prompt_path.read_bytes()).hexdigest()[:12],
         )
 
@@ -111,8 +111,8 @@ class TestJobMetadataIncludesPromptHash:
 
     def test_create_job_includes_prompt_hash(self, tmp_path):
         """Job metadata must include planner_prompt_hash."""
-        from webapp.job_manager import JobManager
-        from webapp.schemas import CreateJobRequest
+        from jose_wipes.jobs.job_manager import JobManager
+        from jose_wipes.schemas import CreateJobRequest
 
         manager = JobManager(jobs_dir=tmp_path)
         request = CreateJobRequest.model_validate({

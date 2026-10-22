@@ -16,12 +16,12 @@ def main():
     # [1/5] Módulos importam
     print("\n[1/5] Verificando módulos...")
     modulos = {
-        "scripts.config": None,
-        "scripts.product_reference": None,
-        "scripts.system_prompt": None,
-        "scripts.gerador_midia": None,
-        "scripts.compositor": None,
-        "scripts.uploader": None,
+        "jose_wipes.config": None,
+        "jose_wipes.composition.product_reference": None,
+        "jose_wipes.planning.system_prompt": None,
+        "jose_wipes.integrations.gerador_midia": None,
+        "jose_wipes.composition.compositor": None,
+        "jose_wipes.integrations.uploader": None,
         "scripts.pipeline": None,
         "scripts.web_server": None,
     }
@@ -37,20 +37,20 @@ def main():
     # [2/5] Funções essenciais
     print("\n[2/5] Verificando funções essenciais...")
     funcoes = [
-        ("scripts.config", "validar_configuracao"),
-        ("scripts.config", "carregar_brandbook"),
-        ("scripts.config", "brandbook_para_contexto"),
-        ("scripts.config", "carregar_vozes"),
-        ("scripts.config", "gerar_audio"),
-        ("scripts.config", "decompor_briefing"),
-        ("scripts.product_reference", "obter_imagem_produto_path"),
-        ("scripts.product_reference", "prompt_pede_referencia_produto"),
-        ("scripts.system_prompt", "montar_system_prompt"),
-        ("scripts.gerador_midia", "gerar_video_higgsfield"),
-        ("scripts.gerador_midia", "combinar_video_audio"),
-        ("scripts.gerador_midia", "imagem_para_video_kenburns"),
-        ("scripts.compositor", "compor_video_final"),
-        ("scripts.uploader", "upload_para_drive"),
+        ("jose_wipes.config", "validar_configuracao"),
+        ("jose_wipes.config", "carregar_brandbook"),
+        ("jose_wipes.config", "brandbook_para_contexto"),
+        ("jose_wipes.config", "carregar_vozes"),
+        ("jose_wipes.config", "gerar_audio"),
+        ("jose_wipes.config", "decompor_briefing"),
+        ("jose_wipes.composition.product_reference", "obter_imagem_produto_path"),
+        ("jose_wipes.composition.product_reference", "prompt_pede_referencia_produto"),
+        ("jose_wipes.planning.system_prompt", "montar_system_prompt"),
+        ("jose_wipes.integrations.gerador_midia", "gerar_video_higgsfield"),
+        ("jose_wipes.integrations.gerador_midia", "combinar_video_audio"),
+        ("jose_wipes.integrations.gerador_midia", "imagem_para_video_kenburns"),
+        ("jose_wipes.composition.compositor", "compor_video_final"),
+        ("jose_wipes.integrations.uploader", "upload_para_drive"),
         ("scripts.pipeline", "run_pipeline"),
         ("scripts.web_server", "start_web_server"),
         ("scripts.web_server", "stop_web_server"),
@@ -77,7 +77,7 @@ def main():
 
     # [4/5] Configs existem
     print("\n[4/5] Verificando configs...")
-    from scripts.config import CONFIG_DIR, PROJECT_ROOT
+    from jose_wipes.config import CONFIG_DIR, PROJECT_ROOT
     configs = [
         (CONFIG_DIR / "brandbook.json", True),
         (CONFIG_DIR / "prompts_library.json", True),

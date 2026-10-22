@@ -8,11 +8,10 @@ from pathlib import Path
 from datetime import datetime
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from scripts.config import LOGS_DIR, OUTPUT_DIR, gerar_audio as _gerar_audio_config
-from scripts.integration_errors import IntegrationFailure, classify_higgsfield_exception
-from scripts.higgsfield_model_profiles import find_argument_profile
-from scripts.higgsfield_api import (
+from jose_wipes.config import LOGS_DIR, OUTPUT_DIR, gerar_audio as _gerar_audio_config
+from jose_wipes.integrations.errors import IntegrationFailure, classify_higgsfield_exception
+from jose_wipes.integrations.higgsfield_model_profiles import find_argument_profile
+from jose_wipes.integrations.higgsfield_api import (
     HiggsfieldRequestStatus,
     HiggsfieldStatusSnapshot,
     fetch_request_status,

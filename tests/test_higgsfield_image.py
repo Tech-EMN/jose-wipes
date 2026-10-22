@@ -5,7 +5,7 @@ import time
 sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
-from scripts.config import HF_API_KEY, HF_API_SECRET, OUTPUT_DIR
+from jose_wipes.config import HF_API_KEY, HF_API_SECRET, OUTPUT_DIR
 
 
 def main():

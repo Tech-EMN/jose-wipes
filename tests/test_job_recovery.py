@@ -8,9 +8,9 @@ import threading
 import time
 from pathlib import Path
 
-from webapp.job_claim import ClaimHeartbeat, claim_age_seconds, claim_path, try_claim
-from webapp.job_manager import FilePollingJobManager, JobManager, INTERRUPTED_FAILURE_CODE
-from webapp.schemas import CreateJobRequest, PlannerOutput, PlannerShot, ProductOverlayConfig
+from jose_wipes.jobs.job_claim import ClaimHeartbeat, claim_age_seconds, claim_path, try_claim
+from jose_wipes.jobs.job_manager import FilePollingJobManager, JobManager, INTERRUPTED_FAILURE_CODE
+from jose_wipes.schemas import CreateJobRequest, PlannerOutput, PlannerShot, ProductOverlayConfig
 
 STALE_AFTER_SECONDS = 60
 OLD_TIMESTAMP_OFFSET_SECONDS = 3600

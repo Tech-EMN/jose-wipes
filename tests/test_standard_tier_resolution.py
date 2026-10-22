@@ -1,10 +1,10 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.higgsfield_model_profiles import KLING_3_0_PRO_APPLICATION, KLING_3_0_STD_APPLICATION
-from webapp.model_registry import VideoModelConfig, get_model_config
-from webapp.pipeline_service import render_planned_video
-from webapp.schemas import CreateJobRequest, PlannerOutput, PlannerShot
+from jose_wipes.integrations.higgsfield_model_profiles import KLING_3_0_PRO_APPLICATION, KLING_3_0_STD_APPLICATION
+from jose_wipes.model_registry import VideoModelConfig, get_model_config
+from jose_wipes.rendering.pipeline_service import render_planned_video
+from jose_wipes.schemas import CreateJobRequest, PlannerOutput, PlannerShot
 
 
 def _render(tmp_path: Path, resolution: str) -> tuple[list[VideoModelConfig], dict[str, object]]:
@@ -31,14 +31,14 @@ def _render(tmp_path: Path, resolution: str) -> tuple[list[VideoModelConfig], di
         return tmp_path / "generated.mp4"
 
     with patch(
-        "webapp.pipeline_service.gerar_audio_elevenlabs", side_effect=lambda _p, _t, out: out
-    ), patch("webapp.pipeline_service.medir_duracao_segundos", return_value=2.0), patch(
-        "webapp.pipeline_service._gerar_video_com_fallback", side_effect=fake_video
+        "jose_wipes.rendering.pipeline_service.gerar_audio_elevenlabs", side_effect=lambda _p, _t, out: out
+    ), patch("jose_wipes.rendering.pipeline_service.medir_duracao_segundos", return_value=2.0), patch(
+        "jose_wipes.rendering.pipeline_service._gerar_video_com_fallback", side_effect=fake_video
     ), patch(
-        "webapp.pipeline_service.combinar_video_audio", side_effect=lambda _v, _a, out: out
-    ), patch("webapp.pipeline_service.obter_path_imagem_produto", return_value=None), patch(
-        "webapp.pipeline_service.compor_video_final", return_value=final_path
-    ), patch("webapp.pipeline_service.upload_para_drive", return_value={"id": "1", "link": "l"}):
+        "jose_wipes.rendering.pipeline_service.combinar_video_audio", side_effect=lambda _v, _a, out: out
+    ), patch("jose_wipes.rendering.pipeline_service.obter_path_imagem_produto", return_value=None), patch(
+        "jose_wipes.rendering.pipeline_service.compor_video_final", return_value=final_path
+    ), patch("jose_wipes.rendering.pipeline_service.upload_para_drive", return_value={"id": "1", "link": "l"}):
         result = render_planned_video(
             job_dir=tmp_path / "job",
             request=CreateJobRequest(

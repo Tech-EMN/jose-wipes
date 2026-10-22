@@ -6,7 +6,7 @@ import unicodedata
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PRODUCT_REFERENCE_DIR = PROJECT_ROOT / "assets" / "referencias"
 
 PRODUCT_IMAGE_CANDIDATES = [
