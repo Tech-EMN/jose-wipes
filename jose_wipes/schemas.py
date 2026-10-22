@@ -163,6 +163,7 @@ class JobStatusResponse(BaseModel):
     submit_confirmed: bool | None = None
     render_confirmed: bool | None = None
     failure_reason: str | None = None
+    retry_count: int = 0
 
 
 class ExternalServiceHealth(BaseModel):

@@ -1,14 +1,13 @@
 import json
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from jose_wipes.integrations.errors import IntegrationFailure
 from jose_wipes.model_registry import get_model_config
 from jose_wipes.rendering.pipeline_service import (
-    RENDER_STAGES_FILENAME,
     ComposedVideo,
     RenderInputs,
     compose_video,
@@ -17,6 +16,7 @@ from jose_wipes.rendering.pipeline_service import (
     publish_video,
     render_planned_video,
 )
+from jose_wipes.rendering.checkpoints import RENDER_STAGES_FILENAME
 from jose_wipes.result import Err, Ok
 from jose_wipes.schemas import CreateJobRequest, PlannerOutput, PlannerShot
 
@@ -209,3 +209,92 @@ def test_render_records_the_stage_that_failed(tmp_path: Path) -> None:
     assert stages["publish"]["failure_code"] == "drive_upload_failed"
     assert stages["publish"]["retryable"] is True
 
+
+
+def _render_with(
+    tmp_path: Path,
+    *,
+    generate_video,
+    compose_final,
+    upload,
+    drive_required: bool = False,
+) -> dict[str, object]:
+    inputs = _inputs(tmp_path)
+    with patch(f"{MODULE}._gerar_video_com_fallback", generate_video), patch(
+        f"{MODULE}.obter_path_imagem_produto", return_value=None
+    ), patch(f"{MODULE}.compor_video_final", compose_final), patch(
+        f"{MODULE}.upload_para_drive", upload
+    ), patch(f"{MODULE}.JW_DRIVE_REQUIRED", drive_required):
+        return render_planned_video(
+            job_dir=inputs.job_dir,
+            request=inputs.request,
+            plan=inputs.plan,
+            model_config=inputs.model_config,
+            apply_logo_overlay=False,
+        )
+
+
+def test_resume_after_publish_failure_only_publishes_again(tmp_path: Path) -> None:
+    raw_video = _video(tmp_path, "raw.mp4")
+    final_video = _video(tmp_path, "final.mp4")
+    generate = MagicMock(return_value=raw_video)
+    compose = MagicMock(return_value=final_video)
+
+    with pytest.raises(IntegrationFailure):
+        _render_with(
+            tmp_path,
+            generate_video=generate,
+            compose_final=compose,
+            upload=MagicMock(return_value=None),
+            drive_required=True,
+        )
+
+    upload = MagicMock(return_value={"id": "drive-id", "link": "https://drive/x"})
+    result = _render_with(tmp_path, generate_video=generate, compose_final=compose, upload=upload)
+
+    assert generate.call_count == 1
+    assert compose.call_count == 1
+    upload.assert_called_once_with(final_video)
+    assert result["drive_url"] == "https://drive/x"
+    assert set(_stage_statuses(tmp_path / "job").values()) == {"completed"}
+
+
+def test_resume_after_compose_failure_reuses_generated_media(tmp_path: Path) -> None:
+    generate = MagicMock(return_value=_video(tmp_path, "raw.mp4"))
+
+    with pytest.raises(IntegrationFailure):
+        _render_with(
+            tmp_path,
+            generate_video=generate,
+            compose_final=MagicMock(return_value=None),
+            upload=MagicMock(return_value=None),
+        )
+    assert _stage_statuses(tmp_path / "job")["compose"] == "failed"
+
+    compose = MagicMock(return_value=_video(tmp_path, "final.mp4"))
+    _render_with(tmp_path, generate_video=generate, compose_final=compose, upload=MagicMock(return_value=None))
+
+    assert generate.call_count == 1
+    assert compose.call_count == 1
+
+
+def test_resume_regenerates_media_whose_files_are_gone(tmp_path: Path) -> None:
+    generate = MagicMock(side_effect=lambda *args, **kwargs: _video(tmp_path, "raw.mp4"))
+
+    with pytest.raises(IntegrationFailure):
+        _render_with(
+            tmp_path,
+            generate_video=generate,
+            compose_final=MagicMock(return_value=None),
+            upload=MagicMock(return_value=None),
+        )
+    (tmp_path / "raw.mp4").unlink()
+
+    _render_with(
+        tmp_path,
+        generate_video=generate,
+        compose_final=MagicMock(return_value=_video(tmp_path, "final.mp4")),
+        upload=MagicMock(return_value=None),
+    )
+
+    assert generate.call_count == 2

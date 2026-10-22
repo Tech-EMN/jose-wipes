@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from jose_wipes.config import PROJECT_ROOT, LOGS_DIR, OPENAI_PLANNER_MODEL
 from jose_wipes.logging_config import configure_logging
 from jose_wipes.integrations.external_health import probe_external_health
+from jose_wipes.result import Err
 from jose_wipes.runtime_state import mark_external_connectivity_checked, read_runtime
 from webapp.auth import AuthMiddleware
 from jose_wipes.jobs.job_manager import JobManager
@@ -272,6 +273,20 @@ def get_job_status(job_id: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return JSONResponse(status.model_dump())
+
+
+@app.post("/api/jobs/{job_id}/retry", status_code=202)
+def retry_job(job_id: str) -> JSONResponse:
+    """Queue a failed job again, resuming from the render stage that did not finish."""
+
+    try:
+        result = job_manager.retry_job(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if isinstance(result, Err):
+        raise HTTPException(status_code=409, detail=result.failure.user_message)
+    return JSONResponse(result.value.model_dump(), status_code=202)
 
 
 @app.get("/api/jobs/{job_id}/stream")

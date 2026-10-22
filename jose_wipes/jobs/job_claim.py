@@ -44,6 +44,10 @@ def try_claim(job_dir: Path) -> bool:
     return True
 
 
+def release_claim(job_dir: Path) -> None:
+    claim_path(job_dir).unlink(missing_ok=True)
+
+
 def is_claimed(job_dir: Path) -> bool:
     return claim_path(job_dir).exists()
 

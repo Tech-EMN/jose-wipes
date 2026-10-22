@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
 from pathlib import Path
 from typing import Callable, TypeVar, get_args
 
@@ -38,6 +36,7 @@ from jose_wipes.integrations.errors import IntegrationFailure
 from jose_wipes.integrations.higgsfield_utils import upload_higgsfield_file
 from jose_wipes.integrations.uploader import upload_para_drive
 from jose_wipes.model_registry import VideoModelConfig
+from jose_wipes.rendering.checkpoints import RenderCheckpoints, RenderStage
 from jose_wipes.result import Err, Ok, Result
 from jose_wipes.composition.product_scene import (
     KeyframeSpec,
@@ -341,22 +340,9 @@ def _upload_reference_image(image_path: str | Path | None) -> str | None:
     return None
 
 
-class RenderStage(str, Enum):
-    PLAN = "plan"
-    GENERATE_MEDIA = "generate_media"
-    COMPOSE = "compose"
-    PUBLISH = "publish"
-
-
-class StageStatus(str, Enum):
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-RENDER_STAGES_FILENAME = "etapas_render.json"
 MANIFEST_FILENAME = "manifesto_render.json"
 STUDIO_SERVICE = "studio"
+RESUMING_STEP = "resuming"
 
 
 @dataclass(frozen=True)
@@ -847,45 +833,143 @@ def publish_video(
     )
 
 
-class RenderStageLog:
-    """Records the outcome of each render stage in the job folder."""
-
-    def __init__(self, job_dir: Path) -> None:
-        self._path = job_dir / RENDER_STAGES_FILENAME
-        self._stages: dict[str, dict[str, object]] = {
-            stage.value: {"status": StageStatus.PENDING.value} for stage in RenderStage
-        }
-        self._save()
-
-    def completed(self, stage: RenderStage) -> None:
-        self._stages[stage.value] = {"status": StageStatus.COMPLETED.value, "finished_at": _now_iso()}
-        self._save()
-
-    def failed(self, stage: RenderStage, failure: IntegrationFailure) -> None:
-        self._stages[stage.value] = {
-            "status": StageStatus.FAILED.value,
-            "finished_at": _now_iso(),
-            "failure_code": failure.code,
-            "failed_service": failure.service,
-            "retryable": failure.retryable,
-        }
-        self._save()
-
-    def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(self._stages, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _unwrap(result: Result[T], stage: RenderStage, stage_log: RenderStageLog) -> T:
+def _unwrap(
+    result: Result[T],
+    stage: RenderStage,
+    checkpoints: RenderCheckpoints,
+    to_output: Callable[[T], dict[str, object]] | None = None,
+) -> T:
     if isinstance(result, Err):
-        stage_log.failed(stage, result.failure)
+        checkpoints.failed(stage, result.failure)
         raise result.failure
-    stage_log.completed(stage)
+    checkpoints.completed(stage, to_output(result.value) if to_output else None)
     return result.value
+
+
+def _media_to_output(media: GeneratedMedia) -> dict[str, object]:
+    return {
+        "shots": [
+            {
+                "shot_number": shot_media.shot.shot_number,
+                "base_path": str(shot_media.base_path),
+                "video_path": str(shot_media.video_path),
+                "product_integrated": shot_media.product_integrated,
+                "narration": (
+                    {
+                        "text": shot_media.narration.text,
+                        "audio_path": str(shot_media.narration.audio_path),
+                        "duration_seconds": shot_media.narration.duration_seconds,
+                    }
+                    if shot_media.narration
+                    else None
+                ),
+            }
+            for shot_media in media.shots
+        ],
+        "warnings": list(media.warnings),
+    }
+
+
+def _restore_narration(stored: object) -> NarrationClip | None:
+    if not isinstance(stored, dict):
+        return None
+    return NarrationClip(
+        text=str(stored["text"]),
+        audio_path=Path(str(stored["audio_path"])),
+        duration_seconds=float(stored["duration_seconds"]),
+    )
+
+
+def _restore_media(checkpoints: RenderCheckpoints, render_plan: RenderPlan) -> GeneratedMedia | None:
+    output = checkpoints.output(RenderStage.GENERATE_MEDIA)
+    if output is None:
+        return None
+    stored_shots = output.get("shots")
+    plan_shots = render_plan.inputs.plan.shots
+    if not isinstance(stored_shots, list) or len(stored_shots) != len(plan_shots):
+        return None
+
+    shots: list[ShotMedia] = []
+    for shot, stored in zip(plan_shots, stored_shots):
+        if not isinstance(stored, dict) or stored.get("shot_number") != shot.shot_number:
+            return None
+        narration = _restore_narration(stored.get("narration"))
+        video_path = Path(str(stored["video_path"]))
+        required_files = [video_path, *([narration.audio_path] if narration else [])]
+        if not all(path.exists() for path in required_files):
+            return None
+        shots.append(
+            ShotMedia(
+                shot=shot,
+                base_path=Path(str(stored["base_path"])),
+                video_path=video_path,
+                narration=narration,
+                product_integrated=bool(stored.get("product_integrated")),
+            )
+        )
+    return GeneratedMedia(shots=tuple(shots), warnings=tuple(output.get("warnings", [])))
+
+
+def _composed_to_output(composed: ComposedVideo) -> dict[str, object]:
+    return {
+        "final_video_path": str(composed.final_video_path),
+        "scene_paths": [str(path) for path in composed.scene_paths],
+        "warnings": list(composed.warnings),
+    }
+
+
+def _restore_composed(checkpoints: RenderCheckpoints) -> ComposedVideo | None:
+    output = checkpoints.output(RenderStage.COMPOSE)
+    if output is None:
+        return None
+    final_video_path = Path(str(output["final_video_path"]))
+    if not final_video_path.exists():
+        return None
+    return ComposedVideo(
+        final_video_path=final_video_path,
+        scene_paths=tuple(Path(str(path)) for path in output.get("scene_paths", [])),
+        warnings=tuple(output.get("warnings", [])),
+    )
+
+
+def _media_for(
+    render_plan: RenderPlan,
+    checkpoints: RenderCheckpoints,
+    progress_cb: ProgressCallback | None,
+) -> tuple[GeneratedMedia, bool]:
+    restored = _restore_media(checkpoints, render_plan)
+    if restored is not None:
+        _report(progress_cb, RESUMING_STEP, "Reaproveitando narrações e cenas já geradas...")
+        return restored, True
+    checkpoints.restart_from(RenderStage.GENERATE_MEDIA)
+    media = _unwrap(
+        generate_media(render_plan, progress_cb),
+        RenderStage.GENERATE_MEDIA,
+        checkpoints,
+        _media_to_output,
+    )
+    return media, False
+
+
+def _composed_for(
+    render_plan: RenderPlan,
+    media: GeneratedMedia,
+    checkpoints: RenderCheckpoints,
+    progress_cb: ProgressCallback | None,
+    *,
+    media_restored: bool,
+) -> ComposedVideo:
+    restored = _restore_composed(checkpoints) if media_restored else None
+    if restored is not None:
+        _report(progress_cb, RESUMING_STEP, "Reaproveitando o vídeo final já composto...")
+        return restored
+    checkpoints.restart_from(RenderStage.COMPOSE)
+    return _unwrap(
+        compose_video(render_plan, media, progress_cb),
+        RenderStage.COMPOSE,
+        checkpoints,
+        _composed_to_output,
+    )
 
 
 def _write_manifest(
@@ -928,7 +1012,7 @@ def render_planned_video(
     apply_logo_overlay: bool = True,
     use_product_reference: bool = True,
 ) -> dict[str, object]:
-    """Run the plan, generate media, compose and publish stages for one job."""
+    """Run the render stages for one job, reusing the outputs a previous attempt completed."""
 
     inputs = RenderInputs(
         job_dir=job_dir,
@@ -940,12 +1024,19 @@ def render_planned_video(
         apply_logo_overlay=apply_logo_overlay,
         use_product_reference=use_product_reference,
     )
-    stage_log = RenderStageLog(job_dir)
+    checkpoints = RenderCheckpoints(job_dir)
 
-    render_plan = _unwrap(plan_render(inputs, progress_cb), RenderStage.PLAN, stage_log)
-    media = _unwrap(generate_media(render_plan, progress_cb), RenderStage.GENERATE_MEDIA, stage_log)
-    composed = _unwrap(compose_video(render_plan, media, progress_cb), RenderStage.COMPOSE, stage_log)
-    published = _unwrap(publish_video(composed, progress_cb), RenderStage.PUBLISH, stage_log)
+    render_plan = _unwrap(plan_render(inputs, progress_cb), RenderStage.PLAN, checkpoints)
+    media, media_restored = _media_for(render_plan, checkpoints, progress_cb)
+    composed = _composed_for(
+        render_plan,
+        media,
+        checkpoints,
+        progress_cb,
+        media_restored=media_restored,
+    )
+    checkpoints.restart_from(RenderStage.PUBLISH)
+    published = _unwrap(publish_video(composed, progress_cb), RenderStage.PUBLISH, checkpoints)
 
     warnings = [
         *render_plan.warnings,
