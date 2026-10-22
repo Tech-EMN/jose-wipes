@@ -1,0 +1,38 @@
+{
+  "title": "José Wipes — Alívio Imediato (E2E Test)",
+  "enhanced_brief_pt": "Vídeo de 10 segundos: uma pessoa incomodada no sofá encontra alívio com José Wipes. Narração curta do narrador institucional.",
+  "global_style": "Comercial cinematográfico, luz suave e quente, 9:16 vertical",
+  "final_cta_pt": "José Wipes. A recuperação que você merece.",
+  "notes": "Plano fixo para os testes E2E; pula o planner para não depender da OpenAI.",
+  "cast": [],
+  "shots": [
+    {
+      "shot_number": 1,
+      "visual_prompt_en": "A person wincing in discomfort, sitting on a couch, soft indoor lighting, shallow depth of field, cinematic, 9:16 vertical format",
+      "duration_seconds": 5,
+      "narration_text_pt": "Quem nunca sentiu aquele incômodo que não passa?",
+      "voice_persona": "narrador",
+      "overlay_text": null,
+      "product_overlay": {
+        "ativo": false,
+        "posicao": "centro",
+        "tamanho_pct": 55
+      },
+      "characters": []
+    },
+    {
+      "shot_number": 2,
+      "visual_prompt_en": "A person smiling with relief, bright warm lighting, clean white bathroom setting, fresh and clean aesthetic, cinematic close-up, 9:16 vertical format",
+      "duration_seconds": 5,
+      "narration_text_pt": "José Wipes. Alívio imediato que você sente na hora.",
+      "voice_persona": "narrador",
+      "overlay_text": "ALÍVIO IMEDIATO",
+      "product_overlay": {
+        "ativo": false,
+        "posicao": "centro",
+        "tamanho_pct": 55
+      },
+      "characters": []
+    }
+  ]
+}

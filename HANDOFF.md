@@ -91,7 +91,7 @@ main (original)
 ```
 tests/test_e2e.py               — 6 cenários E2E (490 linhas)
 tests/conftest.py               — Config pytest + marcadores
-tests/fixtures/e2e_plan.json    — Plano pré-gerado (2 cenas + card final)
+tests/fixtures/e2e_web_plan.json — Plano fixo no formato da web (2 shots)
 .gitignore                      — Proteção de .env, output, logs
 ```
 
@@ -130,7 +130,7 @@ config/planner_system_prompt.txt — F11
 EASYPANEL_DEPLOY.md              — F8
 tests/test_e2e.py               — F18 ✨
 tests/conftest.py               — F18 ✨
-tests/fixtures/e2e_plan.json    — F18 ✨
+tests/fixtures/e2e_web_plan.json — F18 ✨
 .gitignore                      — F18 ✨
 ```
 

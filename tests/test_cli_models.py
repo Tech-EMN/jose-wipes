@@ -1,4 +1,3 @@
-import json
 import re
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from scripts.higgsfield_model_profiles import (
     find_argument_profile,
 )
 from scripts.system_prompt import BLOCO_GUARDRAILS, BLOCO_MODELOS
+from webapp.schemas import PlannerOutput
 
 PROJECT_ROOT = Path(__file__).parent.parent
 DISCONTINUED_KLING_PREFIX = "kling-video/v2.1/"
@@ -39,11 +39,12 @@ def test_cli_sources_do_not_reference_kling_2_1() -> None:
         assert DISCONTINUED_KLING_PREFIX not in source, relative_path
 
 
-def test_e2e_fixture_scenes_use_profiled_models() -> None:
-    plan = json.loads((PROJECT_ROOT / "tests/fixtures/e2e_plan.json").read_text(encoding="utf-8"))
+def test_e2e_fixture_is_a_valid_web_plan() -> None:
+    plan = PlannerOutput.model_validate_json(
+        (PROJECT_ROOT / "tests/fixtures/e2e_web_plan.json").read_text(encoding="utf-8")
+    )
 
-    for scene in plan["cenas"]:
-        assert find_argument_profile(scene["modelo"]) is not None, scene["modelo"]
+    assert plan.shots
 
 
 @pytest.mark.parametrize("marker", DISCONTINUED_MODEL_MARKERS)
