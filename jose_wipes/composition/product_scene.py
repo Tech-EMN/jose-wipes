@@ -6,12 +6,12 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.compositor import compor_produto_em_cena
-from scripts.gerador_midia import gerar_video_higgsfield
-from scripts.higgsfield_model_profiles import SOUL_2_APPLICATION
-from scripts.integration_errors import IntegrationFailure
-from webapp.planner import PRODUCT_COMPOSITING_VISUAL_CONSTRAINT
-from webapp.schemas import PlannerShot
+from jose_wipes.composition.compositor import compor_produto_em_cena
+from jose_wipes.integrations.gerador_midia import gerar_video_higgsfield
+from jose_wipes.integrations.higgsfield_model_profiles import SOUL_2_APPLICATION
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.planning.planner import PRODUCT_COMPOSITING_VISUAL_CONSTRAINT
+from jose_wipes.schemas import PlannerShot
 
 KEYFRAME_RESOLUTION = "1080p"
 EMPTY_AREA_SENTENCE = re.compile(r"Keep a clean empty [\w -]+? placement area on the primary surface\.\s*")

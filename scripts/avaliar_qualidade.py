@@ -13,7 +13,7 @@ from datetime import datetime
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.config import CONFIG_DIR
+from jose_wipes.config import CONFIG_DIR
 from scripts.pipeline import (
     DEFAULT_DURATION_SECONDS,
     DEFAULT_ORIENTATION,
@@ -22,7 +22,7 @@ from scripts.pipeline import (
     print_progress,
     run_pipeline,
 )
-from webapp.schemas import CreateJobRequest
+from jose_wipes.schemas import CreateJobRequest
 
 
 AVALIACOES_FILE = CONFIG_DIR / "avaliacoes_qualidade.json"

@@ -12,7 +12,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.cleanup_retention import collect_candidates, delete_candidates
+from jose_wipes.retention import collect_candidates, delete_candidates
 
 
 UTC = timezone.utc

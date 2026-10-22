@@ -4,7 +4,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
-from scripts.config import CONFIG_DIR
+from jose_wipes.config import CONFIG_DIR
 
 
 def main():
@@ -50,7 +50,7 @@ def main():
     # [3/3] gerar_audio importável
     print("\n[3/3] Verificando função gerar_audio...")
     try:
-        from scripts.config import gerar_audio
+        from jose_wipes.config import gerar_audio
         if callable(gerar_audio):
             print("  ✓ gerar_audio é importável e callable")
         else:

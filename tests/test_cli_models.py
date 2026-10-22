@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.higgsfield_model_profiles import (
+from jose_wipes.integrations.higgsfield_model_profiles import (
     KLING_3_0_PRO_APPLICATION,
     KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION,
     find_argument_profile,
 )
-from scripts.system_prompt import BLOCO_GUARDRAILS, BLOCO_MODELOS
-from webapp.schemas import PlannerOutput
+from jose_wipes.planning.system_prompt import BLOCO_GUARDRAILS, BLOCO_MODELOS
+from jose_wipes.schemas import PlannerOutput
 
 PROJECT_ROOT = Path(__file__).parent.parent
 DISCONTINUED_KLING_PREFIX = "kling-video/v2.1/"
@@ -32,7 +32,7 @@ def test_cli_planner_prompt_only_recommends_current_kling_models() -> None:
 def test_cli_sources_do_not_reference_kling_2_1() -> None:
     for relative_path in (
         "scripts/pipeline.py",
-        "scripts/system_prompt.py",
+        "jose_wipes/planning/system_prompt.py",
         "scripts/higgsfield_video_smoke_test.py",
     ):
         source = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
@@ -49,13 +49,13 @@ def test_e2e_fixture_is_a_valid_web_plan() -> None:
 
 @pytest.mark.parametrize("marker", DISCONTINUED_MODEL_MARKERS)
 def test_cli_planner_prompt_drops_discontinued_models(marker: str) -> None:
-    source = (PROJECT_ROOT / "scripts/system_prompt.py").read_text(encoding="utf-8")
+    source = (PROJECT_ROOT / "jose_wipes/planning/system_prompt.py").read_text(encoding="utf-8")
 
     assert marker not in source
 
 
 def test_every_model_in_cli_planner_prompt_has_an_argument_profile() -> None:
-    source = (PROJECT_ROOT / "scripts/system_prompt.py").read_text(encoding="utf-8")
+    source = (PROJECT_ROOT / "jose_wipes/planning/system_prompt.py").read_text(encoding="utf-8")
     models = set(PROMPT_MODEL_PATTERN.findall(source))
 
     assert models

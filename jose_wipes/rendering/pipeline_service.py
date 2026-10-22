@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Callable, get_args
 
-from scripts.compositor import (
+from jose_wipes.composition.compositor import (
     BRAND_CARD_LOGO_WIDTH_PCT,
     LOGO_OVERLAY_WIDTH_PCT,
     adicionar_logo_overlay,
@@ -18,37 +18,37 @@ from scripts.compositor import (
     obter_formato_imagem,
     overlay_produto,
 )
-from scripts.config import (
+from jose_wipes.config import (
     JW_DRIVE_REQUIRED,
     obter_path_imagem_produto,
     obter_url_imagem_produto,
 )
-from scripts.product_reference import prompt_pede_referencia_produto
-from scripts.gerador_midia import (
+from jose_wipes.composition.product_reference import prompt_pede_referencia_produto
+from jose_wipes.integrations.gerador_midia import (
     combinar_video_audio,
     gerar_audio_elevenlabs,
     gerar_video_higgsfield,
     medir_duracao_segundos,
 )
-from scripts.higgsfield_model_profiles import ModelArgumentProfile, find_argument_profile
-from scripts.integration_errors import IntegrationFailure
-from scripts.higgsfield_utils import upload_higgsfield_file
-from scripts.uploader import upload_para_drive
-from webapp.model_registry import VideoModelConfig
-from webapp.product_scene import (
+from jose_wipes.integrations.higgsfield_model_profiles import ModelArgumentProfile, find_argument_profile
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.integrations.higgsfield_utils import upload_higgsfield_file
+from jose_wipes.integrations.uploader import upload_para_drive
+from jose_wipes.model_registry import VideoModelConfig
+from jose_wipes.composition.product_scene import (
     KeyframeSpec,
     animation_prompt,
     render_product_keyframe,
     shot_integrates_product,
 )
-from webapp.narration_plan import (
+from jose_wipes.planning.narration_plan import (
     BRAND_CARD_DURATION_SECONDS,
     DurationRange,
     NarrationClip,
     budget_warning,
     fit_narration_to_budget,
 )
-from webapp.schemas import CreateJobRequest, DurationLiteral, PlannerOutput, PlannerShot
+from jose_wipes.schemas import CreateJobRequest, DurationLiteral, PlannerOutput, PlannerShot
 
 
 ProgressCallback = Callable[[str, str], None]
@@ -176,7 +176,7 @@ def _gerar_video_com_fallback(
     import logging
     _log = logging.getLogger(__name__)
 
-    from webapp.video_generator import (
+    from jose_wipes.integrations.video_generator import (
         VideoGenerationRequest,
         create_video_generator,
     )

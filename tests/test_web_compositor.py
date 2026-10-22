@@ -9,7 +9,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.compositor import compor_video_final
+from jose_wipes.composition.compositor import compor_video_final
 
 
 def gerar_video_teste(output_path: Path, width: int, height: int, color: str) -> None:

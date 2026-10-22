@@ -29,19 +29,35 @@ jose-wipes-pipeline/
 │   │   └── lider/
 │   └── referencias/                  # Vídeos de referência
 │
-├── scripts/
-│   ├── __init__.py
-│   ├── config.py                     # Configuração central + utilitários (Passo 2)
-│   ├── system_prompt.py              # System prompt do Claude (Passo 7)
-│   ├── gerador_midia.py              # Geração de vídeo/imagem/áudio (Passo 8)
-│   ├── compositor.py                 # Composição FFmpeg (Passo 8)
-│   ├── uploader.py                   # Upload Google Drive (Passo 8)
+├── jose_wipes/                       # Núcleo de domínio (importado pela web, worker e scripts)
+│   ├── config.py                     # Configuração central + utilitários
+│   ├── schemas.py                    # Contratos de request/plano/job
+│   ├── model_registry.py             # Modelos de vídeo/imagem disponíveis
+│   ├── moderation.py                 # Moderação de briefing
+│   ├── pdf_utils.py                  # Leitura de roteiro em PDF
+│   ├── retention.py                  # Limpeza de jobs e logs antigos
+│   ├── runtime_state.py              # Estado do servidor local (output/runtime)
+│   ├── logging_config.py             # Logging estruturado
+│   ├── integrations/                 # Higgsfield, OpenAI, ElevenLabs, Drive, health
+│   ├── composition/                  # FFmpeg, overlays, produto e referências
+│   ├── planning/                     # Planner, narração e system prompt
+│   ├── rendering/                    # pipeline_service: execução do plano
+│   └── jobs/                         # JobManager, claim e recuperação de jobs
+│
+├── webapp/                           # App de produção: FastAPI, auth, rate limit, worker
+│
+├── scripts/                          # Ferramentas de linha de comando (chamam jose_wipes)
 │   ├── pipeline.py                   # CLI do mesmo pipeline da web
-│   ├── testar_prompts.py             # Teste de prompts na Higgsfield (Passo 5)
-│   ├── clonar_vozes.py               # Gerenciamento de vozes (Passo 6)
-│   ├── avaliar_qualidade.py          # Bateria de QA (Passo 10)
-│   ├── health_check.py               # Diagnóstico do sistema (Passo 10)
-│   └── mostrar_estrutura.py          # Este arquivo (Passo 10)
+│   ├── avaliar_qualidade.py          # Bateria de QA
+│   ├── health_check.py               # Diagnóstico do sistema
+│   ├── cleanup_retention.py          # Limpeza de jobs e logs
+│   ├── web_server.py                 # Sobe/para o Studio localmente
+│   ├── testar_prompts.py             # Teste de prompts na Higgsfield
+│   ├── clonar_vozes.py               # Gerenciamento de vozes
+│   ├── descobrir_modelos_higgsfield.py
+│   ├── higgsfield_video_smoke_test.py
+│   ├── google_drive_auth.py          # Autorização OAuth do Drive
+│   └── mostrar_estrutura.py          # Este arquivo
 │
 ├── tests/
 │   ├── __init__.py

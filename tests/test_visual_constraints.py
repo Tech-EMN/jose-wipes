@@ -5,25 +5,25 @@ from unittest.mock import patch
 
 import pytest
 
-from scripts.compositor import (
+from jose_wipes.composition.compositor import (
     _limitar_duracao,
     adicionar_logo_overlay,
     compor_video_final,
     normalizar_cena,
     overlay_produto,
 )
-from scripts.gerador_midia import combinar_video_audio
-from scripts.integration_errors import IntegrationFailure
-from scripts.product_reference import prompt_pede_referencia_produto
-from webapp.model_registry import get_model_config
-from webapp.pipeline_service import render_planned_video
-from webapp.planner import (
+from jose_wipes.integrations.gerador_midia import combinar_video_audio
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.composition.product_reference import prompt_pede_referencia_produto
+from jose_wipes.model_registry import get_model_config
+from jose_wipes.rendering.pipeline_service import render_planned_video
+from jose_wipes.planning.planner import (
     NO_TEXT_VISUAL_CONSTRAINT,
     NO_NARRATION_VISUAL_CONSTRAINT,
     PRODUCT_COMPOSITING_VISUAL_CONSTRAINT,
     plan_web_video,
 )
-from webapp.schemas import (
+from jose_wipes.schemas import (
     CreateJobRequest,
     PlannerOutput,
     PlannerShot,
@@ -78,10 +78,10 @@ def test_planner_honors_no_text_brief() -> None:
         "Sem narracao. Não mostre pessoas, mãos ou texto na tela. Mostre a embalagem."
     )
 
-    with patch("webapp.planner.OPENAI_API_KEY", "test-key"), patch(
-        "webapp.planner.OpenAI", return_value=object()
+    with patch("jose_wipes.planning.planner.OPENAI_API_KEY", "test-key"), patch(
+        "jose_wipes.planning.planner.OpenAI", return_value=object()
     ), patch(
-        "webapp.planner.create_text_response",
+        "jose_wipes.planning.planner.create_text_response",
         return_value=json.dumps(_planner_payload()),
     ):
         plan = plan_web_video(request, "", get_model_config("kling_3_0"))
@@ -134,20 +134,20 @@ def test_product_overlay_replaces_generation_reference(tmp_path: Path) -> None:
     final_path.write_bytes(b"final")
 
     with patch(
-        "webapp.pipeline_service.obter_path_imagem_produto", return_value=product_path
+        "jose_wipes.rendering.pipeline_service.obter_path_imagem_produto", return_value=product_path
     ), patch(
-        "webapp.pipeline_service.obter_url_imagem_produto",
+        "jose_wipes.rendering.pipeline_service.obter_url_imagem_produto",
         return_value="https://example.com/product.png",
     ) as product_url_mock, patch(
-        "webapp.pipeline_service._gerar_video_com_fallback", side_effect=generate
+        "jose_wipes.rendering.pipeline_service._gerar_video_com_fallback", side_effect=generate
     ) as generate_mock, patch(
-        "webapp.pipeline_service.overlay_produto", side_effect=overlay
+        "jose_wipes.rendering.pipeline_service.overlay_produto", side_effect=overlay
     ) as product_overlay_mock, patch(
-        "webapp.pipeline_service.gerar_card_logo", return_value=product_path
+        "jose_wipes.rendering.pipeline_service.gerar_card_logo", return_value=product_path
     ), patch(
-        "webapp.pipeline_service.compor_video_final", return_value=final_path
+        "jose_wipes.rendering.pipeline_service.compor_video_final", return_value=final_path
     ), patch(
-        "webapp.pipeline_service.upload_para_drive",
+        "jose_wipes.rendering.pipeline_service.upload_para_drive",
         return_value={"id": "drive-id", "link": "https://drive.example/video"},
     ):
         render_planned_video(
@@ -187,16 +187,16 @@ def test_disabled_product_reference_skips_upload_and_generation_reference(tmp_pa
     final_path.write_bytes(b"final")
 
     with patch(
-        "webapp.pipeline_service.obter_url_imagem_produto",
+        "jose_wipes.rendering.pipeline_service.obter_url_imagem_produto",
         return_value="https://example.com/product.png",
     ) as product_url_mock, patch(
-        "webapp.pipeline_service._gerar_video_com_fallback", side_effect=generate
+        "jose_wipes.rendering.pipeline_service._gerar_video_com_fallback", side_effect=generate
     ) as generate_mock, patch(
-        "webapp.pipeline_service.gerar_card_logo", return_value=final_path
+        "jose_wipes.rendering.pipeline_service.gerar_card_logo", return_value=final_path
     ), patch(
-        "webapp.pipeline_service.compor_video_final", return_value=final_path
+        "jose_wipes.rendering.pipeline_service.compor_video_final", return_value=final_path
     ), patch(
-        "webapp.pipeline_service.upload_para_drive",
+        "jose_wipes.rendering.pipeline_service.upload_para_drive",
         return_value={"id": "drive-id", "link": "https://drive.example/video"},
     ):
         render_planned_video(
@@ -218,9 +218,9 @@ def test_compositor_rejects_partial_normalization(tmp_path: Path) -> None:
         scene_path.write_bytes(b"video")
 
     with patch(
-        "scripts.compositor.normalizar_cena",
+        "jose_wipes.composition.compositor.normalizar_cena",
         side_effect=[tmp_path / "normalized.mp4", None],
-    ), patch("scripts.compositor.concatenar_cenas", return_value=None) as concat_mock:
+    ), patch("jose_wipes.composition.compositor.concatenar_cenas", return_value=None) as concat_mock:
         result = compor_video_final(
             scene_paths,
             "Jose Wipes",
@@ -246,19 +246,19 @@ def test_compositor_reserves_requested_duration_for_final_card(tmp_path: Path) -
     )
 
     with patch(
-        "scripts.compositor.normalizar_cena",
+        "jose_wipes.composition.compositor.normalizar_cena",
         side_effect=normalized,
     ), patch(
-        "scripts.compositor.concatenar_cenas",
+        "jose_wipes.composition.compositor.concatenar_cenas",
         side_effect=lambda _scenes, output: Path(output),
     ) as concat_mock, patch(
-        "scripts.compositor._limitar_duracao",
+        "jose_wipes.composition.compositor._limitar_duracao",
         side_effect=lambda path, _duration: Path(path),
     ) as limiter_mock, patch(
-        "scripts.compositor.adicionar_logo_overlay",
+        "jose_wipes.composition.compositor.adicionar_logo_overlay",
         return_value=final_path,
     ), patch(
-        "scripts.compositor._subprocess_run",
+        "jose_wipes.composition.compositor._subprocess_run",
         return_value=type("Probe", (), {"stdout": probe})(),
     ):
         result = compor_video_final(
@@ -309,15 +309,15 @@ def test_render_respects_drive_delivery_policy(
         )
 
     with patch(
-        "webapp.pipeline_service._gerar_video_com_fallback",
+        "jose_wipes.rendering.pipeline_service._gerar_video_com_fallback",
         return_value=generated_path,
     ), patch(
-        "webapp.pipeline_service.obter_path_imagem_produto", return_value=None
+        "jose_wipes.rendering.pipeline_service.obter_path_imagem_produto", return_value=None
     ), patch(
-        "webapp.pipeline_service.compor_video_final", return_value=final_path
+        "jose_wipes.rendering.pipeline_service.compor_video_final", return_value=final_path
     ), patch(
-        "webapp.pipeline_service.upload_para_drive", return_value=None
-    ), patch("webapp.pipeline_service.JW_DRIVE_REQUIRED", drive_required):
+        "jose_wipes.rendering.pipeline_service.upload_para_drive", return_value=None
+    ), patch("jose_wipes.rendering.pipeline_service.JW_DRIVE_REQUIRED", drive_required):
         if drive_required:
             with pytest.raises(IntegrationFailure) as captured:
                 render()
@@ -341,7 +341,7 @@ def test_none_logo_path_copies_video_without_watermark(tmp_path: Path) -> None:
     output_path = tmp_path / "output.mp4"
     input_path.write_bytes(b"video")
 
-    with patch("scripts.compositor._subprocess_run") as subprocess_mock:
+    with patch("jose_wipes.composition.compositor._subprocess_run") as subprocess_mock:
         result = adicionar_logo_overlay(input_path, None, output_path)
 
     subprocess_mock.assert_not_called()
@@ -357,9 +357,9 @@ def test_product_overlay_adds_contact_shadow(tmp_path: Path) -> None:
     product_path.write_bytes(b"product")
 
     with patch(
-        "scripts.compositor._obter_dimensoes_video",
+        "jose_wipes.composition.compositor._obter_dimensoes_video",
         return_value=(720, 1280),
-    ), patch("scripts.compositor._subprocess_run") as subprocess_mock:
+    ), patch("jose_wipes.composition.compositor._subprocess_run") as subprocess_mock:
         result = overlay_produto(
             video_path,
             output_path,
@@ -385,11 +385,11 @@ def test_exact_target_dimensions_skip_letterbox_detection(tmp_path: Path) -> Non
     input_path.write_bytes(b"video")
 
     with patch(
-        "scripts.compositor._obter_dimensoes_video",
+        "jose_wipes.composition.compositor._obter_dimensoes_video",
         return_value=(720, 1280),
     ), patch(
-        "scripts.compositor._detectar_crop_sem_letterbox"
-    ) as crop_mock, patch("scripts.compositor._subprocess_run") as run_mock:
+        "jose_wipes.composition.compositor._detectar_crop_sem_letterbox"
+    ) as crop_mock, patch("jose_wipes.composition.compositor._subprocess_run") as run_mock:
         result = normalizar_cena(input_path, output_path, largura=720, altura=1280)
 
     video_filter = run_mock.call_args.args[0][run_mock.call_args.args[0].index("-vf") + 1]
@@ -405,7 +405,7 @@ def test_duration_limiter_fits_requested_duration(tmp_path: Path) -> None:
     def create_trimmed(command: list[str], **_kwargs: object) -> None:
         Path(command[-1]).write_bytes(b"trimmed video")
 
-    with patch("scripts.compositor._subprocess_run", side_effect=create_trimmed) as run_mock:
+    with patch("jose_wipes.composition.compositor._subprocess_run", side_effect=create_trimmed) as run_mock:
         result = _limitar_duracao(video_path, 10)
 
     command = run_mock.call_args.args[0]
@@ -420,8 +420,8 @@ def test_audio_shorter_than_video_keeps_video_duration(tmp_path: Path) -> None:
     output_path = tmp_path / "combined.mp4"
 
     with patch(
-        "scripts.gerador_midia._probe_duration_seconds", side_effect=[4.0, 1.9]
-    ), patch("scripts.gerador_midia._subprocess_run") as run_mock:
+        "jose_wipes.integrations.gerador_midia._probe_duration_seconds", side_effect=[4.0, 1.9]
+    ), patch("jose_wipes.integrations.gerador_midia._subprocess_run") as run_mock:
         result = combinar_video_audio("video.mp4", "audio.mp3", output_path)
 
     command = run_mock.call_args.args[0]

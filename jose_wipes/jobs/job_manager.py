@@ -12,9 +12,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from scripts.config import OUTPUT_DIR
-from scripts.integration_errors import IntegrationFailure, build_generic_failure
-from webapp.job_claim import (
+from jose_wipes.config import OUTPUT_DIR
+from jose_wipes.integrations.errors import IntegrationFailure, build_generic_failure
+from jose_wipes.jobs.job_claim import (
     DEFAULT_HEARTBEAT_SECONDS,
     DEFAULT_STALE_AFTER_SECONDS,
     ClaimHeartbeat,
@@ -22,11 +22,11 @@ from webapp.job_claim import (
     is_claimed,
     try_claim,
 )
-from webapp.model_registry import get_model_config
-from webapp.pdf_utils import extract_pdf_text
-from webapp.pipeline_service import render_planned_video
-from webapp.planner import plan_web_video, _prompt_content_hash
-from webapp.schemas import CreateJobRequest, JobStatusResponse, JobSummary
+from jose_wipes.model_registry import get_model_config
+from jose_wipes.pdf_utils import extract_pdf_text
+from jose_wipes.rendering.pipeline_service import render_planned_video
+from jose_wipes.planning.planner import plan_web_video, _prompt_content_hash
+from jose_wipes.schemas import CreateJobRequest, JobStatusResponse, JobSummary
 
 PLAN_FILENAME = "plano_web.json"
 

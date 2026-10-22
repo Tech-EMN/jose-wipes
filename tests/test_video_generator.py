@@ -10,10 +10,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from scripts.gerador_midia import gerar_video_higgsfield
-from scripts.higgsfield_api import HiggsfieldRequestStatus, HiggsfieldStatusSnapshot
-from scripts.integration_errors import IntegrationFailure
-from webapp.video_generator import (
+from jose_wipes.integrations.gerador_midia import gerar_video_higgsfield
+from jose_wipes.integrations.higgsfield_api import HiggsfieldRequestStatus, HiggsfieldStatusSnapshot
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.integrations.video_generator import (
     VideoGenerator,
     VideoGenerationRequest,
     VideoGenerationResult,
@@ -38,12 +38,12 @@ def _write_download(command, **_kwargs):
 @contextmanager
 def _higgsfield_environment(client, fetch_status, *, dimensions):
     with patch.dict(sys.modules, {"higgsfield_client": client}), patch(
-        "scripts.gerador_midia.fetch_request_status", fetch_status
+        "jose_wipes.integrations.gerador_midia.fetch_request_status", fetch_status
     ), patch(
-        "scripts.gerador_midia._subprocess_run", side_effect=_write_download
+        "jose_wipes.integrations.gerador_midia._subprocess_run", side_effect=_write_download
     ), patch(
-        "scripts.gerador_midia._probe_video_dimensions", return_value=dimensions
-    ), patch("scripts.gerador_midia.time.sleep"):
+        "jose_wipes.integrations.gerador_midia._probe_video_dimensions", return_value=dimensions
+    ), patch("jose_wipes.integrations.gerador_midia.time.sleep"):
         yield
 
 
@@ -92,7 +92,7 @@ class TestHiggsfieldVideoGenerator:
         monkeypatch.setenv("HF_API_KEY", "test-key")
         monkeypatch.setenv("HF_API_SECRET", "test-secret")
         import importlib
-        import scripts.config as cfg
+        import jose_wipes.config as cfg
         importlib.reload(cfg)
         gen = HiggsfieldVideoGenerator("test-app")
         assert gen.health_check() is True
@@ -101,7 +101,7 @@ class TestHiggsfieldVideoGenerator:
         monkeypatch.setenv("HF_API_KEY", "")
         monkeypatch.setenv("HF_API_SECRET", "")
         import importlib
-        import scripts.config as cfg
+        import jose_wipes.config as cfg
         importlib.reload(cfg)
         gen = HiggsfieldVideoGenerator("test-app")
         assert gen.health_check() is False
@@ -360,8 +360,8 @@ def test_wan_720p_request_sends_720p_without_native_check(tmp_path):
 
 def test_realistic_tier_defaults_to_kling_3_pro_without_native_sound(monkeypatch):
     import importlib
-    import webapp.model_registry as registry
-    from scripts.higgsfield_model_profiles import find_argument_profile
+    import jose_wipes.model_registry as registry
+    from jose_wipes.integrations.higgsfield_model_profiles import find_argument_profile
 
     monkeypatch.delenv("HF_MODEL_KLING_3_0", raising=False)
     config = importlib.reload(registry).get_model_config("kling_3_0")

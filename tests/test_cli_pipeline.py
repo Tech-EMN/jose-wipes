@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 import scripts.pipeline as cli
-import webapp.job_manager as job_manager_module
-from scripts.integration_errors import IntegrationFailure
-from webapp.moderation import ModerationResult
-from webapp.schemas import CreateJobRequest, PlannerOutput
+import jose_wipes.jobs.job_manager as job_manager_module
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.moderation import ModerationResult
+from jose_wipes.schemas import CreateJobRequest, PlannerOutput
 
 FIXTURE_PLAN = Path(__file__).parent / "fixtures" / "e2e_web_plan.json"
 
