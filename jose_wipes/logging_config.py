@@ -7,7 +7,7 @@ Provides:
 - Consistent timestamp format (ISO 8601)
 
 Usage:
-    from scripts.logging_config import configure_logging, get_logger
+    from jose_wipes.logging_config import configure_logging, get_logger
 
     configure_logging(level="INFO")
     _log = get_logger(__name__, job_id="abc123")

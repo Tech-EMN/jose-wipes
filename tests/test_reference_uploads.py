@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from webapp.reference_images import TransparencyCheck, check_transparency
+from jose_wipes.composition.reference_images import TransparencyCheck, check_transparency
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 

@@ -1,6 +1,6 @@
 import pytest
 
-from webapp.narration_plan import split_sentences
+from jose_wipes.planning.narration_plan import split_sentences
 
 
 @pytest.mark.parametrize(

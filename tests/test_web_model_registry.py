@@ -5,7 +5,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
-from webapp.model_registry import VIDEO_MODEL_REGISTRY, get_model_config
+from jose_wipes.model_registry import VIDEO_MODEL_REGISTRY, get_model_config
 
 
 def main():

@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 import scripts.pipeline as cli
-import webapp.job_manager as job_manager_module
-from scripts.integration_errors import IntegrationFailure
-from webapp.moderation import ModerationResult
-from webapp.schemas import CreateJobRequest, PlannerOutput
+import jose_wipes.jobs.job_manager as job_manager_module
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.moderation import ModerationResult
+from jose_wipes.schemas import CreateJobRequest, PlannerOutput
 
 FIXTURE_PLAN = Path(__file__).parent / "fixtures" / "e2e_web_plan.json"
 
@@ -151,3 +151,35 @@ def test_main_runs_saved_plan_and_returns_success(tmp_path, recorder, monkeypatc
 
 def test_main_without_input_returns_usage_error(capsys):
     assert cli.main([]) == cli.EXIT_USAGE
+
+
+def test_resume_pipeline_continues_a_failed_job_without_planning_again(tmp_path, recorder, monkeypatch):
+    def failing_renderer(**kwargs):
+        raise IntegrationFailure(
+            service="ffmpeg",
+            stage="composing",
+            code="final_video_invalid",
+            user_message="Falha na composição.",
+            retryable=True,
+        )
+
+    monkeypatch.setattr(job_manager_module, "render_planned_video", failing_renderer)
+    failed = cli.run_pipeline(_request(), jobs_dir=tmp_path)
+    assert failed.status.status == "failed"
+
+    monkeypatch.setattr(job_manager_module, "render_planned_video", recorder.renderer)
+    resumed = cli.resume_pipeline(failed.job_id, jobs_dir=tmp_path)
+
+    assert resumed.succeeded
+    assert recorder.planner_calls == 1
+    assert resumed.status.retry_count == 1
+
+
+def test_resume_pipeline_refuses_a_completed_job(tmp_path, recorder):
+    done = cli.run_pipeline(_request(), jobs_dir=tmp_path)
+
+    resumed = cli.resume_pipeline(done.job_id, jobs_dir=tmp_path)
+
+    assert not resumed.succeeded
+    assert resumed.rejected_reason
+    assert len(recorder.render_calls) == 1

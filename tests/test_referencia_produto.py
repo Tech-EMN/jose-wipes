@@ -5,8 +5,8 @@ import json
 sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
-from scripts.config import ASSETS_DIR, CONFIG_DIR, HF_API_KEY, HF_API_SECRET, PRODUCT_IMAGE_PATH
-from scripts.product_reference import obter_imagem_produto_path
+from jose_wipes.config import ASSETS_DIR, CONFIG_DIR, HF_API_KEY, HF_API_SECRET, PRODUCT_IMAGE_PATH
+from jose_wipes.composition.product_reference import obter_imagem_produto_path
 
 
 def main():

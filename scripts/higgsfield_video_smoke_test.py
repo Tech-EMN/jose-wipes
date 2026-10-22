@@ -10,10 +10,10 @@ from pathlib import Path
 
 import httpx
 
-from scripts.config import HF_API_KEY, HF_API_SECRET, OUTPUT_DIR, obter_url_imagem_produto
-from scripts.higgsfield_model_profiles import KLING_3_0_PRO_APPLICATION
-from scripts.integration_errors import classify_higgsfield_exception
-from scripts.product_reference import prompt_pede_referencia_produto
+from jose_wipes.config import HF_API_KEY, HF_API_SECRET, OUTPUT_DIR, obter_url_imagem_produto
+from jose_wipes.integrations.higgsfield_model_profiles import KLING_3_0_PRO_APPLICATION
+from jose_wipes.integrations.errors import classify_higgsfield_exception
+from jose_wipes.composition.product_reference import prompt_pede_referencia_produto
 
 
 PRIMARY_MODEL = "google/veo/3.1"

@@ -108,7 +108,7 @@ class TestCICDWorkflow:
 
     def test_planner_model_matches_runtime_and_requires_explicit_production_env(self):
         root = Path(__file__).parent.parent
-        runtime = (root / "scripts" / "config.py").read_text(encoding="utf-8")
+        runtime = (root / "jose_wipes" / "config.py").read_text(encoding="utf-8")
         env_example = (root / ".env.hostinger.example").read_text(encoding="utf-8")
         compose = (root / "docker-compose.hostinger.yml").read_text(encoding="utf-8")
 

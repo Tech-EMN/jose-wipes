@@ -5,7 +5,7 @@ import time
 sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
-from scripts.config import ELEVENLABS_API_KEY, OUTPUT_DIR
+from jose_wipes.config import ELEVENLABS_API_KEY, OUTPUT_DIR
 
 
 def main():

@@ -1,14 +1,14 @@
 import json
 from unittest.mock import patch
 
-from webapp.model_registry import get_model_config
-from webapp.planner import (
+from jose_wipes.model_registry import get_model_config
+from jose_wipes.planning.planner import (
     CAST_PROMPT_PREFIX,
     CONTINUOUS_TAKE_VISUAL_CONSTRAINT,
     _planner_system_prompt,
     plan_web_video,
 )
-from webapp.schemas import CreateJobRequest
+from jose_wipes.schemas import CreateJobRequest
 
 JOAO = "Brazilian man, 40s, medium-brown skin, short black hair, trimmed beard, faded navy t-shirt"
 LIDER = "Brazilian man, 60s, light-brown skin, grey hair, round glasses, beige cardigan"
@@ -45,9 +45,9 @@ def _plan(shots: list[dict[str, object]], cast: list[dict[str, str]]):
         prompt="Grupo de apoio sem texto na tela.",
         video_model="kling_3_0",
     )
-    with patch("webapp.planner.OPENAI_API_KEY", "test-key"), patch(
-        "webapp.planner.OpenAI", return_value=object()
-    ), patch("webapp.planner.create_text_response", return_value=json.dumps(payload)):
+    with patch("jose_wipes.planning.planner.OPENAI_API_KEY", "test-key"), patch(
+        "jose_wipes.planning.planner.OpenAI", return_value=object()
+    ), patch("jose_wipes.planning.planner.create_text_response", return_value=json.dumps(payload)):
         return plan_web_video(request, "", get_model_config("kling_3_0"))
 
 

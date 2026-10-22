@@ -10,8 +10,7 @@ from pathlib import Path
 from datetime import datetime
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from scripts.config import OUTPUT_DIR, ASSETS_DIR, obter_path_imagem_produto
+from jose_wipes.config import OUTPUT_DIR, ASSETS_DIR, obter_path_imagem_produto
 
 # Flag do Windows para não abrir janela de console
 _NO_WINDOW = 0x08000000 if os.name == "nt" else 0

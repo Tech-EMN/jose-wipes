@@ -3,10 +3,10 @@ from unittest.mock import patch
 
 import pytest
 
-from webapp.model_registry import get_model_config
-from webapp.narration_plan import strip_speaker_labels
-from webapp.planner import plan_web_video
-from webapp.schemas import CreateJobRequest
+from jose_wipes.model_registry import get_model_config
+from jose_wipes.planning.narration_plan import strip_speaker_labels
+from jose_wipes.planning.planner import plan_web_video
+from jose_wipes.schemas import CreateJobRequest
 
 
 @pytest.mark.parametrize(
@@ -44,9 +44,9 @@ def test_planner_removes_speaker_labels_from_narration() -> None:
     request = CreateJobRequest(
         resolution="720p", orientation="vertical", duration_seconds=10, prompt="Grupo de apoio.", video_model="kling_3_0"
     )
-    with patch("webapp.planner.OPENAI_API_KEY", "test-key"), patch(
-        "webapp.planner.OpenAI", return_value=object()
-    ), patch("webapp.planner.create_text_response", return_value=json.dumps(payload)):
+    with patch("jose_wipes.planning.planner.OPENAI_API_KEY", "test-key"), patch(
+        "jose_wipes.planning.planner.OpenAI", return_value=object()
+    ), patch("jose_wipes.planning.planner.create_text_response", return_value=json.dumps(payload)):
         plan = plan_web_video(request, "", get_model_config("kling_3_0"))
 
     assert [shot.narration_text_pt for shot in plan.shots] == ["Meu nome é João.", "Virou confete."]

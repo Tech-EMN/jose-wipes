@@ -42,6 +42,7 @@ Enquanto a Atria não confirmar se o Drive é obrigatório, `JW_DRIVE_REQUIRED=f
    - `--resolucao 720p|1080p` (padrão 1080p) e `--orientacao vertical|horizontal` (padrão vertical)
    - `--pdf roteiro.pdf` para enviar um roteiro, `--sem-logo` e `--sem-referencia-produto`
    - `--plano output/web_jobs/<job_id>/plano_web.json` para refazer um vídeo com um plano já aprovado, sem chamar o planejador
+   - `--retomar <job_id>` para tentar de novo um job que falhou, a partir da etapa em que parou
 4. Aguarde a conclusão, com meta máxima de 20 minutos; o progresso aparece no terminal
 5. O vídeo final estará em `output/web_jobs/<job_id>/final/`, aparece na lista de jobs da web e, quando configurado, no Google Drive
 
@@ -124,7 +125,9 @@ O sistema já sabe pelo brandbook:
 - Pode ser limite de API ou modelo ocupado
 - O job falha sem publicar um vídeo parcial
 - Falhas de rede durante o polling do Higgsfield consultam novamente o mesmo `request_id`, sem criar uma geração duplicada
-- Tente novamente em alguns minutos
+- Tente novamente em alguns minutos com o botão "Tentar de novo" no Studio (ou `python scripts/pipeline.py --retomar <job_id>`)
+- A nova tentativa não refaz o que já deu certo: o plano é reaproveitado, cenas e narrações já geradas não são cobradas de novo e, se só o envio ao Drive falhou, apenas ele é repetido
+- O andamento de cada etapa (planejar, gerar mídias, compor, publicar) fica em `output/web_jobs/<job_id>/etapas_render.json`
 
 ### 4. "JSON inválido do planner"
 - Raro, mas pode acontecer

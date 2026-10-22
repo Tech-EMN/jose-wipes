@@ -36,7 +36,7 @@ class TestF15LogoPath:
         monkeypatch.setenv("LOGO_PATH", str(test_logo))
 
         import importlib
-        import scripts.config as cfg
+        import jose_wipes.config as cfg
         importlib.reload(cfg)
 
         result = cfg.obter_logo_path()
@@ -54,7 +54,7 @@ class TestF15LogoPath:
 
         try:
             import importlib
-            import scripts.config as cfg
+            import jose_wipes.config as cfg
             importlib.reload(cfg)
 
             result = cfg.obter_logo_path()
@@ -68,7 +68,7 @@ class TestF15LogoPath:
         monkeypatch.setenv("LOGO_PATH", "assets/logo/mylogo.png")
 
         import importlib
-        import scripts.config as cfg
+        import jose_wipes.config as cfg
         importlib.reload(cfg)
 
 

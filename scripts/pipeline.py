@@ -1,6 +1,6 @@
 """Linha de comando do Studio: roda um vídeo pelo mesmo caminho da web.
 
-Moderação, planner (OpenAI) e render (``webapp.pipeline_service``) são os
+Moderação, planner (OpenAI) e render (``jose_wipes.rendering.pipeline_service``) são os
 mesmos usados em produção; o job fica em ``output/web_jobs`` como os da web.
 
 Exemplos:
@@ -8,6 +8,7 @@ Exemplos:
     python scripts/pipeline.py --arquivo briefing.txt --duracao 60 --modelo kling_3_0
     python scripts/pipeline.py --pdf roteiro.pdf "Siga o roteiro anexo"
     python scripts/pipeline.py --plano output/web_jobs/<job_id>/plano_web.json
+    python scripts/pipeline.py --retomar <job_id>
 """
 
 from __future__ import annotations
@@ -22,9 +23,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from webapp.job_manager import JobManager, ProgressListener
-from webapp.moderation import moderate_prompt_sync
-from webapp.schemas import (
+from jose_wipes.jobs.job_manager import JobManager, ProgressListener
+from jose_wipes.moderation import moderate_prompt_sync
+from jose_wipes.result import Err
+from jose_wipes.schemas import (
     CreateJobRequest,
     DurationLiteral,
     JobStatusResponse,
@@ -46,12 +48,14 @@ EXIT_USAGE = 2
 
 @dataclass(frozen=True)
 class PipelineRun:
-    """Outcome of one run; ``blocked_reason`` is set when moderation refuses the prompt."""
+    """Outcome of one run; ``blocked_reason`` is set when moderation refuses the prompt
+    and ``rejected_reason`` when a job cannot be resumed."""
 
     job_id: str | None
     status: JobStatusResponse | None
     final_video_path: Path | None
     blocked_reason: str | None = None
+    rejected_reason: str | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -104,6 +108,31 @@ def run_pipeline(
     )
 
 
+def resume_pipeline(
+    job_id: str,
+    *,
+    jobs_dir: Path | None = None,
+    on_progress: ProgressListener | None = None,
+) -> PipelineRun:
+    """Re-run a failed job from the render stage that did not finish."""
+
+    manager = JobManager(jobs_dir=jobs_dir, progress_listener=on_progress)
+    retried = manager.retry_job(job_id)
+    if isinstance(retried, Err):
+        return PipelineRun(
+            job_id=job_id,
+            status=None,
+            final_video_path=None,
+            rejected_reason=retried.failure.user_message,
+        )
+    status = manager.run_now(job_id)
+    return PipelineRun(
+        job_id=job_id,
+        status=status,
+        final_video_path=manager.get_download_path(job_id),
+    )
+
+
 def _fixed_planner(plan: PlannerOutput):
     def planner(request, pdf_text, model_config, *, artifacts_dir=None) -> PlannerOutput:
         return plan
@@ -123,6 +152,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--arquivo", type=Path, help="Ler o briefing de um arquivo de texto")
     parser.add_argument("--pdf", type=Path, help="Roteiro em PDF, como o upload da web")
     parser.add_argument("--plano", type=Path, help="Reusar um plano_web.json e pular o planner")
+    parser.add_argument("--retomar", metavar="JOB_ID", help="Retomar um job que falhou a partir da etapa que parou")
     parser.add_argument("--modelo", choices=get_args(VideoModelLiteral), default=DEFAULT_VIDEO_MODEL)
     parser.add_argument("--resolucao", choices=get_args(ResolutionLiteral), default=DEFAULT_RESOLUTION)
     parser.add_argument("--orientacao", choices=get_args(OrientationLiteral), default=DEFAULT_ORIENTATION)
@@ -156,6 +186,9 @@ def _print_summary(run: PipelineRun) -> None:
     if run.blocked_reason:
         print(f"  Bloqueado pela moderação: {run.blocked_reason}")
         return
+    if run.rejected_reason:
+        print(f"  Não foi possível retomar o job {run.job_id}: {run.rejected_reason}")
+        return
     status = run.status
     print(f"  Job: {run.job_id}")
     print(f"  Status: {status.status if status else '?'}")
@@ -174,6 +207,15 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     args = _parse_args(argv)
+
+    if args.retomar:
+        try:
+            run = resume_pipeline(args.retomar, on_progress=print_progress)
+        except FileNotFoundError as exc:
+            print(str(exc), file=sys.stderr)
+            return EXIT_USAGE
+        _print_summary(run)
+        return EXIT_SUCCESS if run.succeeded else EXIT_FAILURE
 
     plan = PlannerOutput.model_validate_json(args.plano.read_text(encoding="utf-8")) if args.plano else None
     prompt = _resolve_prompt(args, plan)

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from scripts.higgsfield_utils import upload_higgsfield_file
+from jose_wipes.integrations.higgsfield_utils import upload_higgsfield_file
 
 
 def test_upload_higgsfield_file_forwards_signed_headers(tmp_path):
@@ -31,7 +31,7 @@ def test_upload_higgsfield_file_forwards_signed_headers(tmp_path):
     )
 
     with patch.dict(sys.modules, {"higgsfield_client": SimpleNamespace(sync_client=sync_client)}), patch(
-        "scripts.higgsfield_utils.httpx.put"
+        "jose_wipes.integrations.higgsfield_utils.httpx.put"
     ) as upload:
         result = upload_higgsfield_file(file_path)
 
@@ -59,7 +59,7 @@ def test_upload_higgsfield_file_rejects_malformed_presign_response(tmp_path):
     with patch.dict(
         sys.modules,
         {"higgsfield_client": SimpleNamespace(sync_client=sync_client)},
-    ), patch("scripts.higgsfield_utils.httpx.put") as upload, pytest.raises(
+    ), patch("jose_wipes.integrations.higgsfield_utils.httpx.put") as upload, pytest.raises(
         RuntimeError,
         match="missing upload_headers",
     ):
@@ -95,7 +95,7 @@ def test_upload_higgsfield_file_propagates_http_upload_failure(tmp_path):
     with patch.dict(
         sys.modules,
         {"higgsfield_client": SimpleNamespace(sync_client=sync_client)},
-    ), patch("scripts.higgsfield_utils.httpx.put") as upload:
+    ), patch("jose_wipes.integrations.higgsfield_utils.httpx.put") as upload:
         upload.return_value.raise_for_status.side_effect = failure
         with pytest.raises(httpx.HTTPStatusError) as captured:
             upload_higgsfield_file(file_path)

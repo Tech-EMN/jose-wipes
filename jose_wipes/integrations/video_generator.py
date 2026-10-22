@@ -5,7 +5,7 @@ pipeline orchestration, enabling provider swaps without refactoring
 the entire codebase.
 
 Usage:
-    from webapp.video_generator import create_video_generator
+    from jose_wipes.integrations.video_generator import create_video_generator
 
     generator = create_video_generator()
     result = generator.generate(prompt, aspect_ratio="9:16", ...)
@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.integration_errors import IntegrationFailure
+from jose_wipes.integrations.errors import IntegrationFailure
 
 DISCONTINUED_PROVIDER_PREFIX = "openai:"
 
@@ -93,7 +93,7 @@ class HiggsfieldVideoGenerator(VideoGenerator):
         return "Higgsfield"
 
     def generate(self, request: VideoGenerationRequest) -> VideoGenerationResult:
-        from scripts.gerador_midia import gerar_video_higgsfield
+        from jose_wipes.integrations.gerador_midia import gerar_video_higgsfield
 
         result_path = gerar_video_higgsfield(
             self._application,
@@ -125,7 +125,7 @@ class HiggsfieldVideoGenerator(VideoGenerator):
 
     def health_check(self) -> bool:
         try:
-            from scripts.config import HF_API_KEY, HF_API_SECRET
+            from jose_wipes.config import HF_API_KEY, HF_API_SECRET
             return bool(HF_API_KEY and HF_API_SECRET)
         except Exception:
             return False

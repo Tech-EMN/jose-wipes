@@ -9,7 +9,7 @@ from unittest.mock import patch
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from webapp.pdf_utils import extract_pdf_text
+from jose_wipes.pdf_utils import extract_pdf_text
 
 
 class FakePage:

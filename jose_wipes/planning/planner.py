@@ -10,21 +10,21 @@ from pathlib import Path
 from openai import OpenAI
 from pydantic import ValidationError
 
-from scripts.config import (
+from jose_wipes.config import (
     OPENAI_API_KEY,
     OPENAI_PLANNER_MODEL,
     brandbook_para_contexto,
     carregar_vozes,
 )
-from scripts.integration_errors import IntegrationFailure
-from scripts.openai_utils import create_text_response
-from scripts.product_reference import (
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.integrations.openai_utils import create_text_response
+from jose_wipes.composition.product_reference import (
     detectar_gatilhos_referencia_produto,
     prompt_pede_referencia_produto,
 )
-from webapp.model_registry import VideoModelConfig
-from webapp.narration_plan import BRAND_CARD_DURATION_SECONDS, NARRATION_TAIL_SECONDS, strip_speaker_labels
-from webapp.schemas import (
+from jose_wipes.model_registry import VideoModelConfig
+from jose_wipes.planning.narration_plan import BRAND_CARD_DURATION_SECONDS, NARRATION_TAIL_SECONDS, strip_speaker_labels
+from jose_wipes.schemas import (
     CreateJobRequest,
     PlannerCharacter,
     PlannerOutput,
@@ -271,7 +271,7 @@ def _planner_system_prompt(*, orientation: str = "vertical") -> str:
 
     Returns the formatted prompt string.
     """
-    from scripts.config import CONFIG_DIR
+    from jose_wipes.config import CONFIG_DIR
 
     prompt_path = CONFIG_DIR / "planner_system_prompt.txt"
     if not prompt_path.exists():
@@ -306,7 +306,7 @@ def _planner_system_prompt(*, orientation: str = "vertical") -> str:
 def _prompt_content_hash() -> str:
     """Return SHA256 hash of the planner system prompt for version tracking."""
     import hashlib
-    from scripts.config import CONFIG_DIR
+    from jose_wipes.config import CONFIG_DIR
 
     prompt_path = CONFIG_DIR / "planner_system_prompt.txt"
     if not prompt_path.exists():

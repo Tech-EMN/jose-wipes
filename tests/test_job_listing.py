@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from webapp.job_manager import PLAN_FILENAME, JobManager
+from jose_wipes.jobs.job_manager import PLAN_FILENAME, JobManager
 
 API_KEY = "test-key"
 

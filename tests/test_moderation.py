@@ -1,10 +1,10 @@
-"""Tests for webapp.moderation — content safety / prompt moderation."""
+"""Tests for jose_wipes.moderation — content safety / prompt moderation."""
 
 from __future__ import annotations
 
 import pytest
 
-from webapp.moderation import (
+from jose_wipes.moderation import (
     ModerationResult,
     _check_keywords,
     _build_keyword_patterns,
@@ -112,7 +112,7 @@ class TestModeratePromptDisabled:
     def test_disabled_allows_all(self, monkeypatch):
         monkeypatch.setenv("JW_MODERATION_ENABLED", "false")
         import importlib
-        import webapp.moderation as mod
+        import jose_wipes.moderation as mod
         importlib.reload(mod)
 
         # Even CSAM keywords should pass when moderation is off

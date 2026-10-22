@@ -9,6 +9,7 @@ const jobProgress = document.getElementById("job-progress");
 const jobEnhanced = document.getElementById("job-enhanced");
 const jobError = document.getElementById("job-error");
 const jobErrorMeta = document.getElementById("job-error-meta");
+const retryButton = document.getElementById("retry-button");
 const warningsList = document.getElementById("warnings-list");
 const resultContainer = document.getElementById("result-container");
 const previewVideo = document.getElementById("preview-video");
@@ -22,6 +23,7 @@ const modelSelect = document.getElementById("video-model-select");
 const modelHint = document.getElementById("model-hint");
 
 let pollHandle = null;
+let currentJobId = null;
 let isProcessing = false;
 let externalReady = false;
 
@@ -271,6 +273,8 @@ async function fetchExternalHealth() {
 
 /* ===== JOB STATUS ===== */
 function renderStatus(data) {
+  currentJobId = data.job_id || currentJobId;
+  retryButton.classList.toggle("hidden", data.status !== "failed");
   jobTitle.textContent = data.title || "Job em processamento";
   jobBadge.textContent = data.status;
   jobProgress.textContent = data.progress_message || "";
@@ -348,6 +352,19 @@ async function fetchStatus(jobId) {
   renderStatus(data);
 }
 
+const POLL_INTERVAL_MS = 2000;
+
+function startPolling(jobId) {
+  if (pollHandle) {
+    clearInterval(pollHandle);
+  }
+  pollHandle = window.setInterval(() => {
+    fetchStatus(jobId).catch((error) => {
+      jobError.textContent = error.message;
+    });
+  }, POLL_INTERVAL_MS);
+}
+
 function startSSE(jobId) {
   if (pollHandle) {
     clearInterval(pollHandle);
@@ -378,6 +395,30 @@ function startSSE(jobId) {
     startPolling(jobId);
   };
 }
+
+/* ===== RETRY ===== */
+retryButton.addEventListener("click", async () => {
+  if (!currentJobId) {
+    return;
+  }
+  retryButton.disabled = true;
+  try {
+    const response = await fetch(`/api/jobs/${currentJobId}/retry`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.detail || "Nao foi possivel reenviar o job.");
+    }
+    isProcessing = true;
+    updateSubmitState();
+    formMessage.textContent = `Job ${currentJobId} reenviado.`;
+    renderStatus(payload);
+    startSSE(currentJobId);
+  } catch (error) {
+    jobError.textContent = error.message;
+  } finally {
+    retryButton.disabled = false;
+  }
+});
 
 /* ===== FORM SUBMIT ===== */
 form.addEventListener("submit", async (event) => {

@@ -4,23 +4,23 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from scripts.external_health import _metadata_timestamp, probe_external_health
-from scripts.health_check import check_higgsfield, check_openai
-from scripts.higgsfield_api import HiggsfieldAuthOutcome, HiggsfieldAuthProbeResult
+from jose_wipes.integrations.external_health import _metadata_timestamp, probe_external_health
+from jose_wipes.integrations.health_check import check_higgsfield, check_openai
+from jose_wipes.integrations.higgsfield_api import HiggsfieldAuthOutcome, HiggsfieldAuthProbeResult
 
 
 def test_elevenlabs_failure_blocks_narrated_job_submission() -> None:
     with patch(
-        "scripts.external_health.check_ffmpeg",
+        "jose_wipes.integrations.external_health.check_ffmpeg",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_openai",
+        "jose_wipes.integrations.external_health.check_openai",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_higgsfield",
+        "jose_wipes.integrations.external_health.check_higgsfield",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_elevenlabs",
+        "jose_wipes.integrations.external_health.check_elevenlabs",
         return_value=(False, "unavailable"),
     ):
         health = probe_external_health()
@@ -47,16 +47,16 @@ def test_known_higgsfield_credit_failure_blocks_submission(tmp_path) -> None:
     )
 
     with patch(
-        "scripts.external_health.check_ffmpeg",
+        "jose_wipes.integrations.external_health.check_ffmpeg",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_openai",
+        "jose_wipes.integrations.external_health.check_openai",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_higgsfield",
+        "jose_wipes.integrations.external_health.check_higgsfield",
         return_value=(True, "auth only"),
     ), patch(
-        "scripts.external_health.check_elevenlabs",
+        "jose_wipes.integrations.external_health.check_elevenlabs",
         return_value=(True, "ok"),
     ):
         health = probe_external_health(jobs_dir=tmp_path)
@@ -100,16 +100,16 @@ def test_later_higgsfield_success_clears_credit_failure(tmp_path) -> None:
     )
 
     with patch(
-        "scripts.external_health.check_ffmpeg",
+        "jose_wipes.integrations.external_health.check_ffmpeg",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_openai",
+        "jose_wipes.integrations.external_health.check_openai",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_higgsfield",
+        "jose_wipes.integrations.external_health.check_higgsfield",
         return_value=(True, "auth only"),
     ), patch(
-        "scripts.external_health.check_elevenlabs",
+        "jose_wipes.integrations.external_health.check_elevenlabs",
         return_value=(True, "ok"),
     ):
         health = probe_external_health(jobs_dir=tmp_path)
@@ -136,16 +136,16 @@ def test_expired_higgsfield_credit_failure_does_not_block_submission(tmp_path) -
     )
 
     with patch(
-        "scripts.external_health.check_ffmpeg",
+        "jose_wipes.integrations.external_health.check_ffmpeg",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_openai",
+        "jose_wipes.integrations.external_health.check_openai",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_higgsfield",
+        "jose_wipes.integrations.external_health.check_higgsfield",
         return_value=(True, "auth only"),
     ), patch(
-        "scripts.external_health.check_elevenlabs",
+        "jose_wipes.integrations.external_health.check_elevenlabs",
         return_value=(True, "ok"),
     ):
         health = probe_external_health(jobs_dir=tmp_path)
@@ -157,22 +157,22 @@ def test_expired_higgsfield_credit_failure_does_not_block_submission(tmp_path) -
 
 def test_provider_probes_are_cached() -> None:
     with patch(
-        "scripts.external_health._probe_cache",
+        "jose_wipes.integrations.external_health._probe_cache",
         None,
     ), patch(
-        "scripts.external_health.check_ffmpeg",
+        "jose_wipes.integrations.external_health.check_ffmpeg",
         return_value=(True, "ok"),
     ) as ffmpeg, patch(
-        "scripts.external_health.check_openai",
+        "jose_wipes.integrations.external_health.check_openai",
         return_value=(True, "ok"),
     ) as openai, patch(
-        "scripts.external_health.check_higgsfield",
+        "jose_wipes.integrations.external_health.check_higgsfield",
         return_value=(True, "ok"),
     ) as higgsfield, patch(
-        "scripts.external_health.check_elevenlabs",
+        "jose_wipes.integrations.external_health.check_elevenlabs",
         return_value=(True, "ok"),
     ) as elevenlabs, patch(
-        "scripts.external_health.time.monotonic",
+        "jose_wipes.integrations.external_health.time.monotonic",
         side_effect=[100.0, 101.0],
     ):
         probe_external_health(use_cached_probes=True)
@@ -190,8 +190,8 @@ def test_openai_health_uses_non_generative_model_lookup() -> None:
     client.models.retrieve.return_value = model
     openai = SimpleNamespace(OpenAI=MagicMock(return_value=client))
 
-    with patch("scripts.health_check.OPENAI_API_KEY", "test-key"), patch(
-        "scripts.health_check.OPENAI_PLANNER_MODEL",
+    with patch("jose_wipes.integrations.health_check.OPENAI_API_KEY", "test-key"), patch(
+        "jose_wipes.integrations.health_check.OPENAI_PLANNER_MODEL",
         "gpt-4.1-mini",
     ), patch.dict(sys.modules, {"openai": openai}):
         ok, message = check_openai()
@@ -202,10 +202,10 @@ def test_openai_health_uses_non_generative_model_lookup() -> None:
 
 
 def _check_higgsfield_with_probe(probe: HiggsfieldAuthProbeResult) -> tuple[bool, str]:
-    with patch("scripts.health_check.HF_API_KEY", "test-key"), patch(
-        "scripts.health_check.HF_API_SECRET",
+    with patch("jose_wipes.integrations.health_check.HF_API_KEY", "test-key"), patch(
+        "jose_wipes.integrations.health_check.HF_API_SECRET",
         "test-secret",
-    ), patch("scripts.higgsfield_api.probe_higgsfield_auth", return_value=probe):
+    ), patch("jose_wipes.integrations.higgsfield_api.probe_higgsfield_auth", return_value=probe):
         return check_higgsfield()
 
 
@@ -229,10 +229,10 @@ def test_higgsfield_health_reports_rejected_credentials() -> None:
 
 def test_higgsfield_health_skips_provider_call_without_credentials() -> None:
     probe = MagicMock()
-    with patch("scripts.health_check.HF_API_KEY", ""), patch(
-        "scripts.health_check.HF_API_SECRET",
+    with patch("jose_wipes.integrations.health_check.HF_API_KEY", ""), patch(
+        "jose_wipes.integrations.health_check.HF_API_SECRET",
         "",
-    ), patch("scripts.higgsfield_api.probe_higgsfield_auth", probe):
+    ), patch("jose_wipes.integrations.higgsfield_api.probe_higgsfield_auth", probe):
         ok, message = check_higgsfield()
 
     assert ok is False
@@ -242,16 +242,16 @@ def test_higgsfield_health_skips_provider_call_without_credentials() -> None:
 
 def test_rejected_higgsfield_credentials_surface_classified_reason() -> None:
     with patch(
-        "scripts.external_health.check_ffmpeg",
+        "jose_wipes.integrations.external_health.check_ffmpeg",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_openai",
+        "jose_wipes.integrations.external_health.check_openai",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_higgsfield",
+        "jose_wipes.integrations.external_health.check_higgsfield",
         return_value=(False, "Erro: HTTP 401: Invalid API key"),
     ), patch(
-        "scripts.external_health.check_elevenlabs",
+        "jose_wipes.integrations.external_health.check_elevenlabs",
         return_value=(True, "ok"),
     ):
         health = probe_external_health()
@@ -266,16 +266,16 @@ def test_rejected_higgsfield_credentials_surface_classified_reason() -> None:
 def test_external_health_hides_provider_error_details() -> None:
     signed_url = "https://upload.example.com/private-signature"
     with patch(
-        "scripts.external_health.check_ffmpeg",
+        "jose_wipes.integrations.external_health.check_ffmpeg",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_openai",
+        "jose_wipes.integrations.external_health.check_openai",
         return_value=(False, f"Erro: request failed at {signed_url}"),
     ), patch(
-        "scripts.external_health.check_higgsfield",
+        "jose_wipes.integrations.external_health.check_higgsfield",
         return_value=(False, f"Erro: upload failed at {signed_url}"),
     ), patch(
-        "scripts.external_health.check_elevenlabs",
+        "jose_wipes.integrations.external_health.check_elevenlabs",
         return_value=(False, f"Erro: request failed at {signed_url}"),
     ):
         health = probe_external_health()
@@ -307,16 +307,16 @@ def test_corrupt_metadata_is_ignored_and_unknown_higgsfield_model_is_classified(
     )
 
     with patch(
-        "scripts.external_health.check_ffmpeg",
+        "jose_wipes.integrations.external_health.check_ffmpeg",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_openai",
+        "jose_wipes.integrations.external_health.check_openai",
         return_value=(True, "ok"),
     ), patch(
-        "scripts.external_health.check_higgsfield",
+        "jose_wipes.integrations.external_health.check_higgsfield",
         return_value=(True, "auth only"),
     ), patch(
-        "scripts.external_health.check_elevenlabs",
+        "jose_wipes.integrations.external_health.check_elevenlabs",
         return_value=(True, "ok"),
     ):
         health = probe_external_health(jobs_dir=tmp_path)

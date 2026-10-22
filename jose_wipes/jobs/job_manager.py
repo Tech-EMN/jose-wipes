@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import queue
+import re
 import threading
 import traceback
 import uuid
@@ -12,21 +13,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from scripts.config import OUTPUT_DIR
-from scripts.integration_errors import IntegrationFailure, build_generic_failure
-from webapp.job_claim import (
+from jose_wipes.config import OUTPUT_DIR
+from jose_wipes.integrations.errors import IntegrationFailure, build_generic_failure
+from jose_wipes.jobs.job_claim import (
     DEFAULT_HEARTBEAT_SECONDS,
     DEFAULT_STALE_AFTER_SECONDS,
     ClaimHeartbeat,
     claim_age_seconds,
     is_claimed,
+    release_claim,
     try_claim,
 )
-from webapp.model_registry import get_model_config
-from webapp.pdf_utils import extract_pdf_text
-from webapp.pipeline_service import render_planned_video
-from webapp.planner import plan_web_video, _prompt_content_hash
-from webapp.schemas import CreateJobRequest, JobStatusResponse, JobSummary
+from jose_wipes.model_registry import get_model_config
+from jose_wipes.pdf_utils import extract_pdf_text
+from jose_wipes.rendering.pipeline_service import render_planned_video
+from jose_wipes.planning.planner import plan_web_video, _prompt_content_hash
+from jose_wipes.result import Err, Ok, Result
+from jose_wipes.schemas import CreateJobRequest, JobStatusResponse, JobSummary, PlannerOutput
 
 PLAN_FILENAME = "plano_web.json"
 
@@ -41,8 +44,40 @@ TERMINAL_STATUSES = frozenset({"completed", FAILED_STATUS})
 INTERRUPTED_FAILURE_CODE = "worker_interrupted"
 INTERRUPTED_USER_MESSAGE = (
     "O processamento foi interrompido porque o worker parou no meio do job. "
-    "Envie o pedido novamente."
+    "Use \"Tentar de novo\" para retomar de onde parou."
 )
+JOB_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
+RETRY_PROGRESS_MESSAGE = "Job reenviado; retomando da etapa que falhou."
+RESUMED_PLAN_MESSAGE = "Plano já aprovado; retomando a renderização..."
+JOB_NOT_FAILED_CODE = "job_not_failed"
+FAILURE_FIELDS = (
+    "error_message",
+    "failed_stage",
+    "failed_service",
+    "failure_code",
+    "retryable",
+    "user_message",
+    "auth_confirmed",
+    "submit_confirmed",
+    "render_confirmed",
+    "failure_reason",
+)
+
+
+def _cleared_failure_fields() -> dict[str, None]:
+    return dict.fromkeys(FAILURE_FIELDS)
+
+
+def _job_not_failed(job_id: str, status: object) -> IntegrationFailure:
+    return IntegrationFailure(
+        service="studio",
+        stage="retry",
+        code=JOB_NOT_FAILED_CODE,
+        user_message="Só é possível tentar de novo um job que falhou.",
+        technical_message=f"Job {job_id} is '{status}', not '{FAILED_STATUS}'.",
+        retryable=False,
+        reason=JOB_NOT_FAILED_CODE,
+    )
 
 _log = logging.getLogger(__name__)
 
@@ -213,8 +248,32 @@ class JobManager:
                 "submit_confirmed": metadata.get("submit_confirmed"),
                 "render_confirmed": metadata.get("render_confirmed"),
                 "failure_reason": metadata.get("failure_reason"),
+                "retry_count": metadata.get("retry_count", 0),
             }
         )
+
+    def retry_job(self, job_id: str) -> Result[JobStatusResponse]:
+        """Queue a failed job again; the render resumes from the first stage that did not finish."""
+
+        if not JOB_ID_PATTERN.fullmatch(job_id):
+            raise FileNotFoundError(f"Job não encontrado: {job_id}")
+        job_dir = self._job_dir(job_id)
+        metadata = self._read_metadata(job_dir)
+        if metadata.get("status") != FAILED_STATUS:
+            return Err(_job_not_failed(job_id, metadata.get("status")))
+
+        self._update_job(
+            job_id,
+            status=QUEUED_STATUS,
+            step=QUEUED_STATUS,
+            progress_message=RETRY_PROGRESS_MESSAGE,
+            warnings=list(metadata.get("planning_warnings", [])),
+            retry_count=int(metadata.get("retry_count", 0)) + 1,
+            **_cleared_failure_fields(),
+        )
+        release_claim(job_dir)
+        self._queue.put(job_id)
+        return Ok(self.get_job_status(job_id))
 
     def list_recent_jobs(self, limit: int) -> list[JobSummary]:
         """Return the newest jobs first, skipping folders without metadata."""
@@ -373,65 +432,69 @@ class JobManager:
         current_stage = "queued"
 
         try:
-            script_pdf_path = metadata.get("script_pdf_path")
-            if script_pdf_path:
-                current_stage = "extracting_pdf"
-                self._update_job(
-                    job_id,
-                    status="extracting_pdf",
-                    step="extracting_pdf",
-                    progress_message="Extraindo texto do PDF enviado...",
-                )
-                pdf_text, pdf_warnings = extract_pdf_text(Path(script_pdf_path))
-                warnings.extend(pdf_warnings)
-                if pdf_text:
-                    (job_dir / "roteiro_extraido.txt").write_text(pdf_text, encoding="utf-8")
-                self._update_job(job_id, warnings=warnings)
-
-            current_stage = "planning"
-            self._update_job(
-                job_id,
-                status="planning",
-                step="planning",
-                progress_message="Planejando shots e narrações com OpenAI...",
-            )
-
-            _MAX_PLANNING_ATTEMPTS = 3
-            plan = None
-            for _attempt in range(1, _MAX_PLANNING_ATTEMPTS + 1):
-                try:
-                    plan = self.planner_fn(
-                        request,
-                        pdf_text,
-                        model_config,
-                        artifacts_dir=job_dir,
-                    )
-                    break
-                except IntegrationFailure as _planning_exc:
-                    (job_dir / f"error_planning_attempt_{_attempt}.log").write_text(
-                        f"technical: {_planning_exc.technical_message}\n\n{traceback.format_exc()}",
-                        encoding="utf-8",
-                    )
-                    if not _planning_exc.retryable or _attempt >= _MAX_PLANNING_ATTEMPTS:
-                        raise
+            plan = self._load_saved_plan(job_dir)
+            if plan is not None:
+                self._update_job(job_id, progress_message=RESUMED_PLAN_MESSAGE)
+            else:
+                script_pdf_path = metadata.get("script_pdf_path")
+                if script_pdf_path:
+                    current_stage = "extracting_pdf"
                     self._update_job(
                         job_id,
-                        progress_message=(
-                            f"OpenAI respondeu parcialmente (tentativa {_attempt}/{_MAX_PLANNING_ATTEMPTS}). "
-                            "Tentando novamente..."
-                        ),
+                        status="extracting_pdf",
+                        step="extracting_pdf",
+                        progress_message="Extraindo texto do PDF enviado...",
                     )
+                    pdf_text, pdf_warnings = extract_pdf_text(Path(script_pdf_path))
+                    warnings.extend(pdf_warnings)
+                    if pdf_text:
+                        (job_dir / "roteiro_extraido.txt").write_text(pdf_text, encoding="utf-8")
+                    self._update_job(job_id, warnings=warnings)
 
-            (job_dir / PLAN_FILENAME).write_text(
-                plan.model_dump_json(indent=2),
-                encoding="utf-8",
-            )
-            self._update_job(
-                job_id,
-                title=plan.title,
-                enhanced_brief=plan.enhanced_brief_pt,
-                progress_message="Plano aprovado; iniciando renderização...",
-            )
+                current_stage = "planning"
+                self._update_job(
+                    job_id,
+                    status="planning",
+                    step="planning",
+                    progress_message="Planejando shots e narrações com OpenAI...",
+                )
+
+                _MAX_PLANNING_ATTEMPTS = 3
+                for _attempt in range(1, _MAX_PLANNING_ATTEMPTS + 1):
+                    try:
+                        plan = self.planner_fn(
+                            request,
+                            pdf_text,
+                            model_config,
+                            artifacts_dir=job_dir,
+                        )
+                        break
+                    except IntegrationFailure as _planning_exc:
+                        (job_dir / f"error_planning_attempt_{_attempt}.log").write_text(
+                            f"technical: {_planning_exc.technical_message}\n\n{traceback.format_exc()}",
+                            encoding="utf-8",
+                        )
+                        if not _planning_exc.retryable or _attempt >= _MAX_PLANNING_ATTEMPTS:
+                            raise
+                        self._update_job(
+                            job_id,
+                            progress_message=(
+                                f"OpenAI respondeu parcialmente (tentativa {_attempt}/{_MAX_PLANNING_ATTEMPTS}). "
+                                "Tentando novamente..."
+                            ),
+                        )
+
+                (job_dir / PLAN_FILENAME).write_text(
+                    plan.model_dump_json(indent=2),
+                    encoding="utf-8",
+                )
+                self._update_job(
+                    job_id,
+                    title=plan.title,
+                    enhanced_brief=plan.enhanced_brief_pt,
+                    planning_warnings=list(warnings),
+                    progress_message="Plano aprovado; iniciando renderização...",
+                )
 
             def report_progress(step: str, message: str) -> None:
                 nonlocal current_stage
@@ -469,16 +532,7 @@ class JobManager:
                 drive_url=render_result.get("drive_url"),
                 preview_url=f"/api/jobs/{job_id}/download",
                 download_url=f"/api/jobs/{job_id}/download",
-                error_message=None,
-                failed_stage=None,
-                failed_service=None,
-                failure_code=None,
-                retryable=None,
-                user_message=None,
-                auth_confirmed=None,
-                submit_confirmed=None,
-                render_confirmed=None,
-                failure_reason=None,
+                **_cleared_failure_fields(),
             )
         except IntegrationFailure as failure:
             (job_dir / "error.log").write_text(traceback.format_exc(), encoding="utf-8")
@@ -502,6 +556,12 @@ class JobManager:
                 warnings=warnings,
                 **failure.to_status_fields(),
             )
+
+    def _load_saved_plan(self, job_dir: Path) -> PlannerOutput | None:
+        plan_path = job_dir / PLAN_FILENAME
+        if not plan_path.exists():
+            return None
+        return PlannerOutput.model_validate_json(plan_path.read_text(encoding="utf-8"))
 
     def _job_dir(self, job_id: str) -> Path:
         job_dir = self.jobs_dir / job_id
