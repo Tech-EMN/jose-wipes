@@ -89,7 +89,7 @@ Quando tiver prompts aprovados, rode o pipeline com um briefing:
 ### Vídeos simples (para começar)
 
 ```bash
-python scripts/pipeline.py "Vídeo de 10 segundos mostrando o produto José Wipes em close, estilo premium, iluminação dramática. Para Instagram."
+python scripts/pipeline.py --duracao 10 "Vídeo de 10 segundos mostrando o produto José Wipes em close, estilo premium, iluminação dramática. Para Instagram."
 ```
 
 ### Vídeo grupo de apoio (o principal)
@@ -98,10 +98,10 @@ python scripts/pipeline.py "Vídeo de 10 segundos mostrando o produto José Wipe
 python scripts/pipeline.py "Vídeo de 30 segundos estilo grupo de apoio. João confessa que usou papel, grupo reage chocado, líder revela José Wipes. Para Instagram Reels."
 ```
 
-### Vídeo completo do roteiro principal (55 segundos)
+### Vídeo completo do roteiro principal (60 segundos)
 
 ```bash
-python scripts/pipeline.py "Quero o vídeo completo do grupo de apoio, 55 segundos, 4 cenas. Cena 1: João confessa que usou papel, grupo reage chocado. Cena 2: Pedro conta história de festival, Carlos conta história de banheiro de estrada. Cena 3: Líder sereno de terno se levanta, coloca mão no ombro de João, diz que existe um caminho, tira pacote de wipes do bolso. Cena 4: Close no pacote, narração José Wipes a recuperação que você merece, texto na tela. Estilo paródia séria de AA, cinematográfico. Para todas as plataformas."
+python scripts/pipeline.py --duracao 60 "Quero o vídeo completo do grupo de apoio, 4 cenas. Cena 1: João confessa que usou papel, grupo reage chocado. Cena 2: Pedro conta história de festival, Carlos conta história de banheiro de estrada. Cena 3: Líder sereno de terno se levanta, coloca mão no ombro de João, diz que existe um caminho, tira pacote de wipes do bolso. Cena 4: Close no pacote, narração José Wipes a recuperação que você merece, texto na tela. Estilo paródia séria de AA, cinematográfico. Para todas as plataformas."
 ```
 
 ### Briefing livre (o sistema decide o formato)
@@ -113,15 +113,18 @@ python scripts/pipeline.py "Faz algo engraçado sobre banheiro de aeroporto"
 ### Usar um plano já gerado (sem gastar crédito do GPT de novo)
 
 ```bash
-python scripts/pipeline.py --plano output/final/plano_20260407_010845.json
+python scripts/pipeline.py --plano output/web_jobs/<job_id>/plano_web.json
 ```
 
+A linha de comando roda o mesmo pipeline da web: o resultado aqui é o que vai para produção.
+
 O que acontece quando roda:
-1. GPT-4o decompõe seu briefing em cenas (30s)
-2. Cada cena é gerada na Higgsfield (1-5 min por cena)
-3. Áudio é gerado no ElevenLabs (poucos segundos)
-4. FFmpeg junta tudo, adiciona logo e texto
-5. Vídeo final aparece em output/final/
+1. A moderação confere o briefing
+2. O planejador da OpenAI divide o briefing em shots de 5 segundos
+3. Cada shot é gerado na Higgsfield (1-5 min por shot)
+4. Áudio é gerado no ElevenLabs (poucos segundos)
+5. FFmpeg junta tudo, adiciona logo, texto e o card final
+6. Vídeo final aparece em output/web_jobs/<job_id>/final/ e na lista de jobs da web
 
 Tempo total: 10-20 minutos dependendo do número de cenas.
 

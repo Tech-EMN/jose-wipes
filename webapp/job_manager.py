@@ -33,6 +33,7 @@ PLAN_FILENAME = "plano_web.json"
 
 PlannerFn = Callable[..., object]
 RendererFn = Callable[..., dict[str, object]]
+ProgressListener = Callable[[str, dict[str, object]], None]
 
 QUEUED_STATUS = "queued"
 FAILED_STATUS = "failed"
@@ -56,10 +57,12 @@ class JobManager:
         renderer_fn: RendererFn | None = None,
         heartbeat_seconds: float = DEFAULT_HEARTBEAT_SECONDS,
         stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
+        progress_listener: ProgressListener | None = None,
     ) -> None:
         self.jobs_dir = Path(jobs_dir) if jobs_dir else OUTPUT_DIR / "web_jobs"
         self.heartbeat_seconds = heartbeat_seconds
         self.stale_after_seconds = stale_after_seconds
+        self.progress_listener = progress_listener
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
         self.planner_fn = planner_fn or plan_web_video
         self.renderer_fn = renderer_fn or render_planned_video
@@ -271,6 +274,13 @@ class JobManager:
                 self._execute_job(job_id)
             finally:
                 self._queue.task_done()
+
+    def run_now(self, job_id: str) -> JobStatusResponse:
+        """Process a job synchronously in the calling thread."""
+
+        if not self._execute_job(job_id):
+            raise RuntimeError(f"Job {job_id} já está sendo processado por outro worker.")
+        return self.get_job_status(job_id)
 
     def recover_interrupted_jobs(self) -> list[str]:
         """Fail jobs whose worker stopped before reaching a terminal status."""
@@ -521,6 +531,8 @@ class JobManager:
         metadata = self._read_metadata(job_dir)
         metadata.update(changes)
         self._write_metadata(job_dir, metadata)
+        if self.progress_listener and ("status" in changes or "progress_message" in changes):
+            self.progress_listener(job_id, metadata)
 
 
 class FilePollingJobManager(JobManager):

@@ -2,7 +2,7 @@
 F18 — Testes E2E (End-to-End) do José Wipes Pipeline.
 
 Cobre 4 cenários:
-  1. E2E real com plano pré-gerado (briefing → vídeo final)
+  1. E2E real com plano pré-gerado, pelo mesmo pipeline da web (plano → vídeo final)
   2. Concorrência (2+ jobs simultâneos via web API)
   3. Carga (5 jobs em sequência)
   4. Recuperação (worker crash + retomada)
@@ -37,7 +37,7 @@ os.environ.setdefault("JW_FFMPEG_TIMEOUT", "60")
 
 # Fixtures dir
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
-E2E_PLAN_PATH = FIXTURES_DIR / "e2e_plan.json"
+E2E_PLAN_PATH = FIXTURES_DIR / "e2e_web_plan.json"
 
 # Output dir for E2E tests
 E2E_OUTPUT = PROJECT_ROOT / "output" / "e2e_tests"
@@ -111,6 +111,22 @@ def load_e2e_plan() -> dict[str, Any]:
     return json.loads(E2E_PLAN_PATH.read_text(encoding="utf-8"))
 
 
+def run_e2e_fixture():
+    """Roda o plano fixo pelo mesmo pipeline da web, sem chamar o planner."""
+    from scripts.pipeline import run_pipeline
+    from webapp.schemas import CreateJobRequest, PlannerOutput
+
+    plan = PlannerOutput.model_validate(load_e2e_plan())
+    request = CreateJobRequest(
+        resolution="720p",
+        orientation="vertical",
+        duration_seconds=10,
+        prompt=plan.enhanced_brief_pt,
+        video_model="seedance_1_5_pro",
+    )
+    return plan, run_pipeline(request, plan=plan, jobs_dir=E2E_OUTPUT / "pipeline_jobs")
+
+
 # ── Teste 1: E2E Real (pipeline completo) ──────────────────────────────────
 
 @pytest.mark.e2e
@@ -131,29 +147,18 @@ def test_e2e_full_pipeline():
     if not hf_ok:
         pytest.skip(f"Higgsfield indisponível: {hf_msg}")
 
-    from scripts.pipeline import executar_pipeline
+    plan, run = run_e2e_fixture()
 
-    plano = load_e2e_plan()
-    resultado = executar_pipeline(plano=plano)
-
-    assert resultado["sucesso"], (
-        f"Pipeline falhou. Cenas falharam: {resultado['cenas_falharam']}"
+    assert run.succeeded, (
+        f"Pipeline falhou em {run.status.failed_stage if run.status else '?'}: "
+        f"{run.status.user_message if run.status else run.blocked_reason}"
     )
-    assert resultado["video_local"] is not None, "Vídeo final não foi gerado"
-    assert Path(resultado["video_local"]).exists(), "Arquivo do vídeo final não existe"
-    assert Path(resultado["video_local"]).stat().st_size > 1024, (
-        "Vídeo final muito pequeno (< 1KB)"
-    )
+    video_path = run.final_video_path
+    assert video_path.exists(), "Arquivo do vídeo final não existe"
+    assert video_path.stat().st_size > 1024, "Vídeo final muito pequeno (< 1KB)"
 
-    # Todas as cenas devem ter sido geradas
-    plano_cenas = plano.get("cenas", [])
-    assert len(resultado["cenas_geradas"]) == len(plano_cenas), (
-        f"Nem todas as cenas foram geradas: "
-        f"{len(resultado['cenas_geradas'])}/{len(plano_cenas)}"
-    )
-
-    print(f"\n  ✓ Vídeo final: {resultado['video_local']}")
-    print(f"  ✓ Tamanho: {Path(resultado['video_local']).stat().st_size / (1024*1024):.1f} MB")
+    print(f"\n  ✓ Vídeo final: {video_path} ({len(plan.shots)} shots)")
+    print(f"  ✓ Tamanho: {video_path.stat().st_size / (1024*1024):.1f} MB")
 
 
 # ── Teste 2: Concorrência (2+ jobs simultâneos) ────────────────────────────
@@ -457,13 +462,10 @@ def test_e2e_output_validation():
     if not hf_ok:
         pytest.skip(f"Higgsfield indisponível: {hf_msg}")
 
-    from scripts.pipeline import executar_pipeline
+    _, run = run_e2e_fixture()
 
-    plano = load_e2e_plan()
-    resultado = executar_pipeline(plano=plano)
-
-    assert resultado["sucesso"], f"Pipeline falhou: {resultado['cenas_falharam']}"
-    video_path = Path(resultado["video_local"])
+    assert run.succeeded, f"Pipeline falhou: {run.status.user_message if run.status else run.blocked_reason}"
+    video_path = run.final_video_path
 
     # Verificar com ffprobe
     def ffprobe(path: Path) -> dict:

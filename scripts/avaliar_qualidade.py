@@ -1,4 +1,8 @@
-"""Bateria de QA: roda briefings representativos e coleta avaliação humana."""
+"""Bateria de QA: roda briefings representativos e coleta avaliação humana.
+
+Cada briefing passa pelo mesmo pipeline da web (``scripts.pipeline.run_pipeline``),
+então a nota mede o que vai para produção.
+"""
 
 import sys
 import json
@@ -9,8 +13,16 @@ from datetime import datetime
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.config import CONFIG_DIR, OUTPUT_DIR
-from scripts.pipeline import executar_pipeline
+from scripts.config import CONFIG_DIR
+from scripts.pipeline import (
+    DEFAULT_DURATION_SECONDS,
+    DEFAULT_ORIENTATION,
+    DEFAULT_RESOLUTION,
+    DEFAULT_VIDEO_MODEL,
+    print_progress,
+    run_pipeline,
+)
+from webapp.schemas import CreateJobRequest
 
 
 AVALIACOES_FILE = CONFIG_DIR / "avaliacoes_qualidade.json"
@@ -89,16 +101,29 @@ def avaliar(qa_id):
     print(f"  QA: {qa_id} — {qa['nome']}")
     print(f"{'=' * 60}")
 
-    # Executar pipeline
-    resultado = executar_pipeline(briefing=qa["briefing"])
+    request = CreateJobRequest.model_validate(
+        {
+            "resolution": DEFAULT_RESOLUTION,
+            "orientation": DEFAULT_ORIENTATION,
+            "duration_seconds": DEFAULT_DURATION_SECONDS,
+            "prompt": qa["briefing"],
+            "video_model": DEFAULT_VIDEO_MODEL,
+        }
+    )
+    run = run_pipeline(request, on_progress=print_progress)
+    status = run.status
 
-    if not resultado.get("sucesso"):
+    if not run.succeeded:
         print(f"\n  ✗ Pipeline falhou para {qa_id}")
         avaliacoes = carregar_avaliacoes()
         avaliacoes[qa_id] = {
             "nome": qa["nome"],
             "status": "falhou",
             "data": datetime.now().isoformat(),
+            "job_id": run.job_id,
+            "video_model": request.video_model,
+            "failure_code": status.failure_code if status else "moderation_blocked",
+            "motivo": run.blocked_reason or (status.user_message if status else None),
         }
         salvar_avaliacoes(avaliacoes)
         return
@@ -144,8 +169,10 @@ def avaliar(qa_id):
         "scores": scores,
         "media": round(media, 2),
         "notas": notas,
-        "video_local": resultado.get("video_local"),
-        "video_drive": resultado.get("video_drive"),
+        "job_id": run.job_id,
+        "video_model": request.video_model,
+        "video_local": str(run.final_video_path),
+        "video_drive": status.drive_url if status else None,
     }
     salvar_avaliacoes(avaliacoes)
     print(f"\n  ✓ Avaliação salva! Média: {media:.1f}/5.0")

@@ -36,7 +36,7 @@ jose-wipes-pipeline/
 │   ├── gerador_midia.py              # Geração de vídeo/imagem/áudio (Passo 8)
 │   ├── compositor.py                 # Composição FFmpeg (Passo 8)
 │   ├── uploader.py                   # Upload Google Drive (Passo 8)
-│   ├── pipeline.py                   # Orquestrador principal (Passo 8)
+│   ├── pipeline.py                   # CLI do mesmo pipeline da web
 │   ├── testar_prompts.py             # Teste de prompts na Higgsfield (Passo 5)
 │   ├── clonar_vozes.py               # Gerenciamento de vozes (Passo 6)
 │   ├── avaliar_qualidade.py          # Bateria de QA (Passo 10)

@@ -36,8 +36,14 @@ Enquanto a Atria não confirmar se o Drive é obrigatório, `JW_DRIVE_REQUIRED=f
    ```bash
    python scripts/pipeline.py "Seu briefing aqui"
    ```
-4. Aguarde a conclusão, com meta máxima de 20 minutos
-5. O vídeo final estará em `output/final/` para download e, quando configurado, no Google Drive
+   A linha de comando usa exatamente o mesmo caminho da web (moderação, planejamento e renderização). As opções equivalem aos campos do formulário:
+   - `--duracao 10|30|60` (padrão 30)
+   - `--modelo seedance_1_5_pro|kling_3_0|veo_3_1|sora_2|sora_2_pro` (padrão `seedance_1_5_pro`)
+   - `--resolucao 720p|1080p` (padrão 1080p) e `--orientacao vertical|horizontal` (padrão vertical)
+   - `--pdf roteiro.pdf` para enviar um roteiro, `--sem-logo` e `--sem-referencia-produto`
+   - `--plano output/web_jobs/<job_id>/plano_web.json` para refazer um vídeo com um plano já aprovado, sem chamar o planejador
+4. Aguarde a conclusão, com meta máxima de 20 minutos; o progresso aparece no terminal
+5. O vídeo final estará em `output/web_jobs/<job_id>/final/`, aparece na lista de jobs da web e, quando configurado, no Google Drive
 
 ### 4 exemplos prontos para copiar/colar
 
@@ -46,14 +52,14 @@ Enquanto a Atria não confirmar se o Drive é obrigatório, `JW_DRIVE_REQUIRED=f
 python scripts/pipeline.py "Vídeo de 30 segundos estilo grupo de apoio. João confessa que usou papel, grupo reage chocado, líder revela José Wipes. Para Instagram Reels."
 ```
 
-**Product Demo Premium (15s):**
+**Product Demo Premium (10s):**
 ```bash
-python scripts/pipeline.py "Vídeo de 15 segundos mostrando o produto em close, estilo premium, iluminação dramática. Narração curta. Para Instagram."
+python scripts/pipeline.py --duracao 10 "Vídeo de 10 segundos mostrando o produto em close, estilo premium, iluminação dramática. Narração curta. Para Instagram."
 ```
 
-**Documentário (20s):**
+**Documentário (30s):**
 ```bash
-python scripts/pipeline.py "Documentário de 20 segundos sobre banheiro de estádio. Narração dramática estilo documentário. Para TikTok."
+python scripts/pipeline.py "Documentário de 30 segundos sobre banheiro de estádio. Narração dramática estilo documentário. Para TikTok."
 ```
 
 **Briefing livre:**

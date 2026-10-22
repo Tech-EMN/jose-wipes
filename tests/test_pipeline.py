@@ -51,7 +51,7 @@ def main():
         ("scripts.gerador_midia", "imagem_para_video_kenburns"),
         ("scripts.compositor", "compor_video_final"),
         ("scripts.uploader", "upload_para_drive"),
-        ("scripts.pipeline", "executar_pipeline"),
+        ("scripts.pipeline", "run_pipeline"),
         ("scripts.web_server", "start_web_server"),
         ("scripts.web_server", "stop_web_server"),
     ]
