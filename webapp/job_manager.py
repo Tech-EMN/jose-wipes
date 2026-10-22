@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import queue
 import threading
 import traceback
@@ -13,6 +14,14 @@ from typing import Callable
 
 from scripts.config import OUTPUT_DIR
 from scripts.integration_errors import IntegrationFailure, build_generic_failure
+from webapp.job_claim import (
+    DEFAULT_HEARTBEAT_SECONDS,
+    DEFAULT_STALE_AFTER_SECONDS,
+    ClaimHeartbeat,
+    claim_age_seconds,
+    is_claimed,
+    try_claim,
+)
 from webapp.model_registry import get_model_config
 from webapp.pdf_utils import extract_pdf_text
 from webapp.pipeline_service import render_planned_video
@@ -25,6 +34,17 @@ PLAN_FILENAME = "plano_web.json"
 PlannerFn = Callable[..., object]
 RendererFn = Callable[..., dict[str, object]]
 
+QUEUED_STATUS = "queued"
+FAILED_STATUS = "failed"
+TERMINAL_STATUSES = frozenset({"completed", FAILED_STATUS})
+INTERRUPTED_FAILURE_CODE = "worker_interrupted"
+INTERRUPTED_USER_MESSAGE = (
+    "O processamento foi interrompido porque o worker parou no meio do job. "
+    "Envie o pedido novamente."
+)
+
+_log = logging.getLogger(__name__)
+
 
 class JobManager:
     """Queue-backed single worker that persists job state on disk."""
@@ -34,8 +54,12 @@ class JobManager:
         jobs_dir: Path | None = None,
         planner_fn: PlannerFn | None = None,
         renderer_fn: RendererFn | None = None,
+        heartbeat_seconds: float = DEFAULT_HEARTBEAT_SECONDS,
+        stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
     ) -> None:
         self.jobs_dir = Path(jobs_dir) if jobs_dir else OUTPUT_DIR / "web_jobs"
+        self.heartbeat_seconds = heartbeat_seconds
+        self.stale_after_seconds = stale_after_seconds
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
         self.planner_fn = planner_fn or plan_web_video
         self.renderer_fn = renderer_fn or render_planned_video
@@ -49,6 +73,10 @@ class JobManager:
 
         if self._worker and self._worker.is_alive():
             return
+
+        self.recover_interrupted_jobs()
+        for job_id in self._discover_queued_jobs():
+            self._queue.put(job_id)
 
         self._stop_event.clear()
         self._worker = threading.Thread(
@@ -240,9 +268,89 @@ class JobManager:
                 continue
 
             try:
-                self._process_job(job_id)
+                self._execute_job(job_id)
             finally:
                 self._queue.task_done()
+
+    def recover_interrupted_jobs(self) -> list[str]:
+        """Fail jobs whose worker stopped before reaching a terminal status."""
+
+        recovered: list[str] = []
+        for job_dir in self._iter_job_dirs():
+            metadata = self._read_metadata_or_none(job_dir)
+            if metadata is None or not self._is_interrupted(job_dir, metadata):
+                continue
+            self._mark_interrupted(job_dir, metadata)
+            recovered.append(job_dir.name)
+            _log.warning(
+                "Job %s interrupted during %s; marked as failed",
+                job_dir.name,
+                metadata.get("status"),
+            )
+        return recovered
+
+    def _execute_job(self, job_id: str) -> bool:
+        job_dir = self._job_dir(job_id)
+        if not try_claim(job_dir):
+            return False
+        with ClaimHeartbeat(job_dir, interval_seconds=self.heartbeat_seconds):
+            self._process_job(job_id)
+        return True
+
+    def _discover_queued_jobs(self) -> list[str]:
+        """List unclaimed jobs waiting for a worker."""
+
+        queued: list[str] = []
+        for job_dir in self._iter_job_dirs():
+            metadata = self._read_metadata_or_none(job_dir)
+            if metadata is None or metadata.get("status") != QUEUED_STATUS:
+                continue
+            if is_claimed(job_dir):
+                continue
+            queued.append(job_dir.name)
+        return queued
+
+    def _is_interrupted(self, job_dir: Path, metadata: dict[str, object]) -> bool:
+        status = metadata.get("status")
+        if status in TERMINAL_STATUSES:
+            return False
+        age = claim_age_seconds(job_dir)
+        if age is None:
+            return status != QUEUED_STATUS
+        return age > self.stale_after_seconds
+
+    def _mark_interrupted(self, job_dir: Path, metadata: dict[str, object]) -> None:
+        stage = str(metadata.get("status") or QUEUED_STATUS)
+        failure = IntegrationFailure(
+            service="worker",
+            stage=stage,
+            code=INTERRUPTED_FAILURE_CODE,
+            user_message=INTERRUPTED_USER_MESSAGE,
+            technical_message=(
+                f"Worker stopped while the job was in '{stage}' and the claim "
+                f"was not refreshed for more than {self.stale_after_seconds:.0f}s."
+            ),
+            retryable=True,
+        )
+        metadata.update(
+            status=FAILED_STATUS,
+            step=FAILED_STATUS,
+            progress_message=failure.user_message,
+            **failure.to_status_fields(),
+        )
+        self._write_metadata(job_dir, metadata)
+
+    def _iter_job_dirs(self) -> list[Path]:
+        if not self.jobs_dir.exists():
+            return []
+        return [path for path in sorted(self.jobs_dir.iterdir()) if path.is_dir()]
+
+    def _read_metadata_or_none(self, job_dir: Path) -> dict[str, object] | None:
+        try:
+            return self._read_metadata(job_dir)
+        except (OSError, json.JSONDecodeError):
+            _log.warning("Ignoring job %s with unreadable metadata", job_dir.name, exc_info=True)
+            return None
 
     def _process_job(self, job_id: str) -> None:
         job_dir = self._job_dir(job_id)
@@ -420,8 +528,9 @@ class FilePollingJobManager(JobManager):
 
     Designed for multi-container deployments where the web server
     and worker run in separate containers with a shared volume.
-    The web container writes job metadata; the worker polls for
-    jobs with status "queued" and processes them.
+    The web container writes job metadata; the worker claims queued
+    jobs atomically, so more than one worker never processes the
+    same job, and fails jobs abandoned by a worker that stopped.
     """
 
     def __init__(
@@ -430,14 +539,17 @@ class FilePollingJobManager(JobManager):
         poll_interval: int = 2,
         planner_fn: PlannerFn | None = None,
         renderer_fn: RendererFn | None = None,
+        heartbeat_seconds: float = DEFAULT_HEARTBEAT_SECONDS,
+        stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
     ) -> None:
         super().__init__(
             jobs_dir=jobs_dir,
             planner_fn=planner_fn,
             renderer_fn=renderer_fn,
+            heartbeat_seconds=heartbeat_seconds,
+            stale_after_seconds=stale_after_seconds,
         )
         self._poll_interval = poll_interval
-        self._processed_jobs: set[str] = set()
 
     def start(self) -> None:
         """Start the polling worker thread."""
@@ -448,7 +560,7 @@ class FilePollingJobManager(JobManager):
         self._worker = threading.Thread(
             target=self._run_polling_worker,
             name="jose-wipes-file-worker",
-            daemon=False,  # Non-daemon so it survives parent process exit
+            daemon=False,
         )
         self._worker.start()
 
@@ -458,14 +570,8 @@ class FilePollingJobManager(JobManager):
         if self._worker and self._worker.is_alive():
             self._worker.join(timeout=30)
 
-    def create_job(self, *args, **kwargs) -> dict[str, object]:
-        """Create a job. In file-polling mode, the worker will pick it up."""
-        return super().create_job(*args, **kwargs)
-
     def _run_polling_worker(self) -> None:
-        """Main polling loop: scan for queued jobs, process them."""
-        import logging
-        _log = logging.getLogger(__name__)
+        """Main polling loop: fail abandoned jobs, then process queued ones."""
         _log.info(
             "File-polling worker started (dir=%s, interval=%ds)",
             self.jobs_dir, self._poll_interval,
@@ -473,41 +579,18 @@ class FilePollingJobManager(JobManager):
 
         while not self._stop_event.is_set():
             try:
-                queued = self._discover_queued_jobs()
-                for job_id in queued:
+                self.recover_interrupted_jobs()
+                for job_id in self._discover_queued_jobs():
                     if self._stop_event.is_set():
                         break
-                    if job_id in self._processed_jobs:
-                        continue
-                    _log.info("Processing job %s", job_id)
                     try:
-                        self._process_job(job_id)
+                        if self._execute_job(job_id):
+                            _log.info("Processed job %s", job_id)
                     except Exception:
                         _log.exception("Job %s failed", job_id)
-                    finally:
-                        self._processed_jobs.add(job_id)
             except Exception:
                 _log.exception("Polling iteration failed")
 
-            # Wait with interruptible sleep
             self._stop_event.wait(timeout=self._poll_interval)
 
         _log.info("File-polling worker stopped")
-
-    def _discover_queued_jobs(self) -> list[str]:
-        """Scan jobs_dir for jobs with status 'queued'."""
-        queued: list[str] = []
-        if not self.jobs_dir.exists():
-            return queued
-
-        for job_dir in sorted(self.jobs_dir.iterdir()):
-            if not job_dir.is_dir():
-                continue
-            try:
-                metadata = self._read_metadata(job_dir)
-                if metadata.get("status") == "queued":
-                    queued.append(job_dir.name)
-            except Exception:
-                continue
-
-        return queued
