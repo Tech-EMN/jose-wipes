@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
-from typing import Callable, get_args
+from typing import Callable, TypeVar, get_args
 
 from jose_wipes.composition.compositor import (
     BRAND_CARD_LOGO_WIDTH_PCT,
@@ -35,6 +38,7 @@ from jose_wipes.integrations.errors import IntegrationFailure
 from jose_wipes.integrations.higgsfield_utils import upload_higgsfield_file
 from jose_wipes.integrations.uploader import upload_para_drive
 from jose_wipes.model_registry import VideoModelConfig
+from jose_wipes.result import Err, Ok, Result
 from jose_wipes.composition.product_scene import (
     KeyframeSpec,
     animation_prompt,
@@ -52,6 +56,7 @@ from jose_wipes.schemas import CreateJobRequest, DurationLiteral, PlannerOutput,
 
 
 ProgressCallback = Callable[[str, str], None]
+T = TypeVar("T")
 DEFAULT_SHOT_DURATION_RANGE = DurationRange(min_seconds=3, max_seconds=15)
 
 
@@ -336,102 +341,207 @@ def _upload_reference_image(image_path: str | Path | None) -> str | None:
     return None
 
 
-def render_planned_video(
-    *,
-    job_dir: Path,
-    request: CreateJobRequest,
-    plan: PlannerOutput,
-    model_config: VideoModelConfig,
+class RenderStage(str, Enum):
+    PLAN = "plan"
+    GENERATE_MEDIA = "generate_media"
+    COMPOSE = "compose"
+    PUBLISH = "publish"
+
+
+class StageStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+RENDER_STAGES_FILENAME = "etapas_render.json"
+MANIFEST_FILENAME = "manifesto_render.json"
+STUDIO_SERVICE = "studio"
+
+
+@dataclass(frozen=True)
+class RenderInputs:
+    job_dir: Path
+    request: CreateJobRequest
+    plan: PlannerOutput
+    model_config: VideoModelConfig
+    ref_embalagem_path: str | None = None
+    ref_logo_path: str | None = None
+    apply_logo_overlay: bool = True
+    use_product_reference: bool = True
+
+
+@dataclass(frozen=True)
+class RenderPlan:
+    inputs: RenderInputs
+    model_config: VideoModelConfig
+    image_model: VideoModelConfig | None
+    scenes_dir: Path
+    final_dir: Path
+    aspect_ratio: str
+    width: int
+    height: int
+    reference_image_url: str | None
+    shot_reference_flags: tuple[bool, ...]
+    logo_path: Path | None
+    product_overlay_path: Path | None
+    scene_product_path: Path | None
+    card_image_path: Path | None
+    card_duration: int
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ShotMedia:
+    shot: PlannerShot
+    base_path: Path
+    video_path: Path
+    narration: NarrationClip | None
+    product_integrated: bool
+
+
+@dataclass(frozen=True)
+class GeneratedMedia:
+    shots: tuple[ShotMedia, ...]
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ComposedVideo:
+    final_video_path: Path
+    scene_paths: tuple[Path, ...]
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PublishedVideo:
+    drive_result: dict[str, object] | None
+    warnings: tuple[str, ...]
+
+
+def _report(progress_cb: ProgressCallback | None, step: str, message: str) -> None:
+    if progress_cb:
+        progress_cb(step, message)
+
+
+def _capture(step: Callable[[], T]) -> Result[T]:
+    try:
+        return Ok(step())
+    except IntegrationFailure as failure:
+        return Err(failure)
+
+
+def _resolution_not_supported(model_config: VideoModelConfig, resolution: str) -> IntegrationFailure:
+    message = f"Resolução {resolution} não é suportada pelo modelo {model_config.label}."
+    return IntegrationFailure(
+        service=STUDIO_SERVICE,
+        stage="planning_render",
+        code="resolution_not_supported",
+        user_message=message,
+        technical_message=message,
+        retryable=False,
+        reason="resolution_not_supported",
+    )
+
+
+def _product_reference_url(
+    ref_embalagem_path: str | None,
+    warnings: list[str],
+    progress_cb: ProgressCallback | None,
+) -> str | None:
+    if ref_embalagem_path:
+        _report(progress_cb, "uploading_ref", "Enviando imagem da embalagem como referência...")
+        uploaded_url = _upload_reference_image(ref_embalagem_path)
+        if uploaded_url:
+            return uploaded_url
+        warnings.append("Não foi possível enviar a embalagem do usuário; usando padrão.")
+    try:
+        return obter_url_imagem_produto()
+    except Exception as exc:
+        warnings.append(f"Referência visual do produto indisponível: {exc}")
+        return None
+
+
+def _existing_path(candidate: str | None) -> Path | None:
+    if candidate and Path(candidate).exists():
+        return Path(candidate)
+    return None
+
+
+def plan_render(
+    inputs: RenderInputs,
     progress_cb: ProgressCallback | None = None,
-    ref_embalagem_path: str | None = None,
-    ref_logo_path: str | None = None,
-    ref_cores_path: str | None = None,
-    apply_logo_overlay: bool = True,
-    use_product_reference: bool = True,
-) -> dict[str, object]:
-    """Generate all scenes for a job and compose the final video."""
+) -> Result[RenderPlan]:
+    """Resolve the model, dimensions and brand references the other stages depend on."""
 
-    cenas_dir = job_dir / "cenas"
-    final_dir = job_dir / "final"
-    cenas_dir.mkdir(parents=True, exist_ok=True)
-    final_dir.mkdir(parents=True, exist_ok=True)
+    request = inputs.request
+    if request.resolution not in inputs.model_config.allowed_resolutions:
+        return Err(_resolution_not_supported(inputs.model_config, request.resolution))
 
-    warnings: list[str] = []
-    aspect_ratio = ASPECT_RATIO_BY_ORIENTATION[request.orientation]
-    largura, altura = VIDEO_DIMENSIONS[(request.orientation, request.resolution)]
+    def build() -> RenderPlan:
+        warnings: list[str] = []
+        model_config = inputs.model_config.for_resolution(request.resolution)
+        if model_config.application != inputs.model_config.application:
+            warnings.append(
+                f"Em {request.resolution}, o nível {inputs.model_config.tier} gera com {model_config.application}, "
+                f"porque {inputs.model_config.application} não entrega essa resolução de forma nativa."
+            )
 
-    if request.resolution not in model_config.allowed_resolutions:
-        raise ValueError(
-            f"Resolução {request.resolution} não é suportada pelo modelo {model_config.label}."
+        shot_reference_flags = tuple(
+            inputs.use_product_reference
+            and not shot.product_overlay.ativo
+            and prompt_pede_referencia_produto(
+                shot.visual_prompt_en,
+                shot.narration_text_pt,
+                shot.overlay_text,
+                shot.notes,
+            )
+            for shot in inputs.plan.shots
+        )
+        reference_image_url = (
+            _product_reference_url(inputs.ref_embalagem_path, warnings, progress_cb)
+            if any(shot_reference_flags)
+            else None
         )
 
-    resolved_model = model_config.for_resolution(request.resolution)
-    if resolved_model.application != model_config.application:
-        warnings.append(
-            f"Em {request.resolution}, o nível {model_config.tier} gera com {resolved_model.application}, "
-            f"porque {model_config.application} não entrega essa resolução de forma nativa."
+        product_overlay_path = _existing_path(inputs.ref_embalagem_path)
+        default_product = obter_path_imagem_produto()
+        card_image_path = _imagem_do_cartao(inputs.ref_logo_path, inputs.ref_embalagem_path)
+        width, height = VIDEO_DIMENSIONS[(request.orientation, request.resolution)]
+        scenes_dir = inputs.job_dir / "cenas"
+        final_dir = inputs.job_dir / "final"
+        scenes_dir.mkdir(parents=True, exist_ok=True)
+        final_dir.mkdir(parents=True, exist_ok=True)
+
+        return RenderPlan(
+            inputs=inputs,
+            model_config=model_config,
+            image_model=model_config.image_to_video(),
+            scenes_dir=scenes_dir,
+            final_dir=final_dir,
+            aspect_ratio=ASPECT_RATIO_BY_ORIENTATION[request.orientation],
+            width=width,
+            height=height,
+            reference_image_url=reference_image_url,
+            shot_reference_flags=shot_reference_flags,
+            logo_path=_existing_path(inputs.ref_logo_path) if inputs.apply_logo_overlay else None,
+            product_overlay_path=product_overlay_path,
+            scene_product_path=product_overlay_path or (Path(default_product) if default_product else None),
+            card_image_path=card_image_path,
+            card_duration=BRAND_CARD_DURATION_SECONDS if card_image_path else 0,
+            warnings=tuple(warnings),
         )
-    model_config = resolved_model
 
-    # Determine which reference image to use for product shots
-    # Priority: user-uploaded embalagem > default product image
-    reference_image_url = None
-    shot_reference_flags = [
-        use_product_reference
-        and not shot.product_overlay.ativo
-        and prompt_pede_referencia_produto(
-            shot.visual_prompt_en,
-            shot.narration_text_pt,
-            shot.overlay_text,
-            shot.notes,
-        )
-        for shot in plan.shots
-    ]
+    return _capture(build)
 
-    if any(shot_reference_flags):
-        if ref_embalagem_path:
-            # Upload user-provided packaging image
-            if progress_cb:
-                progress_cb("uploading_ref", "Enviando imagem da embalagem como referência...")
-            uploaded_url = _upload_reference_image(ref_embalagem_path)
-            if uploaded_url:
-                reference_image_url = uploaded_url
-            else:
-                warnings.append("Não foi possível enviar a embalagem do usuário; usando padrão.")
-                try:
-                    reference_image_url = obter_url_imagem_produto()
-                except Exception as exc:
-                    warnings.append(f"Referência visual do produto indisponível: {exc}")
-        else:
-            try:
-                reference_image_url = obter_url_imagem_produto()
-            except Exception as exc:
-                warnings.append(f"Referência visual do produto indisponível: {exc}")
 
-    # Only apply logo overlay when the user explicitly uploaded a logo
-    logo_path_to_use = None
-    if apply_logo_overlay and ref_logo_path and Path(ref_logo_path).exists():
-        logo_path_to_use = Path(ref_logo_path)
-
-    # Determine product overlay image
-    # Priority: user-uploaded embalagem > default product
-    produto_overlay_path = None
-    if ref_embalagem_path and Path(ref_embalagem_path).exists():
-        produto_overlay_path = Path(ref_embalagem_path)
-
-    image_model = model_config.image_to_video()
-    produto_padrao = obter_path_imagem_produto()
-    produto_da_cena = produto_overlay_path or (Path(produto_padrao) if produto_padrao else None)
-
-    card_image_path = _imagem_do_cartao(ref_logo_path, ref_embalagem_path)
-    card_duration = BRAND_CARD_DURATION_SECONDS if card_image_path else 0
-
-    def sintetizar_narracao(shot_index: int, texto: str) -> NarrationClip:
-        shot = plan.shots[shot_index]
+def _synthesize_narration(render_plan: RenderPlan) -> Callable[[int, str], NarrationClip]:
+    def synthesize(shot_index: int, texto: str) -> NarrationClip:
+        shot = render_plan.inputs.plan.shots[shot_index]
         audio_path = gerar_audio_elevenlabs(
             shot.voice_persona,
             texto,
-            f"{cenas_dir / f'shot_{shot.shot_number:02d}'}_audio.mp3",
+            f"{render_plan.scenes_dir / f'shot_{shot.shot_number:02d}'}_audio.mp3",
         )
         if not audio_path:
             raise _required_step_failure(
@@ -450,233 +560,404 @@ def render_planned_video(
             )
         return NarrationClip(text=texto, audio_path=Path(audio_path), duration_seconds=duracao_audio)
 
-    if progress_cb:
-        progress_cb("generating_audio", "Gerando e medindo as narrações...")
-    narracao = fit_narration_to_budget(
-        [shot.narration_text_pt for shot in plan.shots],
-        [shot.duration_seconds for shot in plan.shots],
-        budget_seconds=request.duration_seconds - card_duration,
-        duration_range=_faixa_de_duracao(model_config),
-        synthesize=sintetizar_narracao,
+    return synthesize
+
+
+def _generate_shot_video(
+    render_plan: RenderPlan,
+    shot_index: int,
+    duration: int,
+    warnings: list[str],
+    progress_cb: ProgressCallback | None,
+) -> tuple[Path, bool]:
+    shot = render_plan.inputs.plan.shots[shot_index]
+    title = render_plan.inputs.plan.title
+    total_shots = len(render_plan.inputs.plan.shots)
+    base_path = render_plan.scenes_dir / f"shot_{shot.shot_number:02d}"
+    product_path = render_plan.scene_product_path
+    integrates_product = (
+        render_plan.image_model is not None
+        and product_path is not None
+        and product_path.exists()
+        and shot_integrates_product(shot)
     )
-    aviso_roteiro = budget_warning(
-        narracao,
-        ceiling_seconds=request.duration_seconds,
-        reserved_seconds=card_duration,
-        available_ceilings=get_args(DurationLiteral),
-    )
-    if aviso_roteiro:
-        warnings.append(aviso_roteiro)
-
-    rendered_scenes: list[str] = []
-    total_shots = len(plan.shots)
-
-    for shot_index, shot in enumerate(plan.shots):
-        should_use_reference = shot_reference_flags[shot_index]
-        if progress_cb:
-            progress_cb(
-                "generating",
-                f"Gerando cena {shot.shot_number}/{total_shots}: {plan.title}",
-            )
-
-        base_path = cenas_dir / f"shot_{shot.shot_number:02d}"
-        produto_integrado = (
-            image_model is not None
-            and produto_da_cena is not None
-            and produto_da_cena.exists()
-            and shot_integrates_product(shot)
+    if integrates_product:
+        _report(
+            progress_cb,
+            "generating",
+            f"Gerando cena {shot.shot_number}/{total_shots} com a embalagem na cena: {title}",
         )
-        video_path = None
-        if produto_integrado:
-            if progress_cb:
-                progress_cb(
-                    "generating",
-                    f"Gerando cena {shot.shot_number}/{total_shots} com a embalagem na cena: {plan.title}",
-                )
-            try:
-                video_path = _gerar_cena_com_produto_integrado(
+        try:
+            return (
+                _gerar_cena_com_produto_integrado(
                     shot,
-                    image_model,
-                    produto_path=produto_da_cena,
-                    aspecto=aspect_ratio,
-                    resolucao=request.resolution,
-                    largura=largura,
-                    altura=altura,
-                    duracao=narracao.shot_durations[shot_index],
+                    render_plan.image_model,
+                    produto_path=product_path,
+                    aspecto=render_plan.aspect_ratio,
+                    resolucao=render_plan.inputs.request.resolution,
+                    largura=render_plan.width,
+                    altura=render_plan.height,
+                    duracao=duration,
                     base_path=base_path,
-                )
-            except IntegrationFailure as failure:
-                warnings.append(
-                    f"Cena {shot.shot_number}: não foi possível colocar a embalagem dentro da cena "
-                    f"({failure.code}); ela foi sobreposta ao vídeo."
-                )
-                produto_integrado = False
-
-        if video_path is None:
-            video_path = _gerar_video_com_fallback(
-                model_config,
-                shot.visual_prompt_en,
-                aspecto=aspect_ratio,
-                resolucao=request.resolution,
-                duracao=narracao.shot_durations[shot_index],
-                output_path=f"{base_path}.mp4",
-                reference_image_url=reference_image_url if should_use_reference else None,
-                extra_arguments=model_config.default_arguments,
+                ),
+                True,
             )
-        if not video_path:            raise RuntimeError(
-                f"Falha na geração da cena {shot.shot_number} usando {model_config.label}."
+        except IntegrationFailure as failure:
+            warnings.append(
+                f"Cena {shot.shot_number}: não foi possível colocar a embalagem dentro da cena "
+                f"({failure.code}); ela foi sobreposta ao vídeo."
             )
 
-        current_video_path = Path(video_path)
-
-        clip = narracao.clips[shot_index]
-        if clip is not None:
-            combined_path = combinar_video_audio(
-                current_video_path,
-                clip.audio_path,
-                f"{base_path}_combined.mp4",
-            )
-            if not combined_path:
-                raise _required_step_failure(
-                    service="ffmpeg",
-                    stage="composing_audio",
-                    code="audio_composition_failed",
-                    message=f"Falha ao combinar a narração da cena {shot.shot_number}.",
-                )
-            current_video_path = Path(combined_path)
-
-        if shot.product_overlay.ativo and not produto_integrado:
-            overlay_path = overlay_produto(
-                current_video_path,
-                f"{base_path}_produto.mp4",
-                produto_path=produto_overlay_path,
-                posicao=shot.product_overlay.posicao,
-                tamanho_pct=shot.product_overlay.tamanho_pct,
-                inicio_seg=shot.product_overlay.inicio_seg,
-            )
-            if overlay_path:
-                current_video_path = Path(overlay_path)
-            else:
-                raise _required_step_failure(
-                    service="ffmpeg",
-                    stage="composing",
-                    code="product_overlay_failed",
-                    message=f"Falha ao aplicar a embalagem na cena {shot.shot_number}.",
-                )
-
-        if shot.overlay_text:
-            text_path = adicionar_texto_overlay(
-                current_video_path,
-                shot.overlay_text,
-                f"{base_path}_texto.mp4",
-                _posicao_do_texto(shot),
-            )
-            if text_path:
-                current_video_path = Path(text_path)
-            else:
-                raise _required_step_failure(
-                    service="ffmpeg",
-                    stage="composing",
-                    code="text_overlay_failed",
-                    message=f"Falha ao aplicar o texto da cena {shot.shot_number}.",
-                )
-
-        rendered_scenes.append(str(current_video_path))
-
-    for image_path, largura_exibida in _imagens_da_marca(
-        plan,
-        largura_video=largura,
-        produto_overlay_path=produto_overlay_path,
-        logo_path=logo_path_to_use,
-        card_image_path=card_image_path,
-    ).items():
-        rotulo = "logo" if ref_logo_path and image_path == Path(ref_logo_path) else "embalagem"
-        warnings.extend(_avisos_qualidade_imagem(rotulo, image_path, largura_exibida))
-
-    if card_image_path:
-        if progress_cb:
-            progress_cb("composing", "Gerando card final com a logo da marca...")
-        card_final_path = final_dir / "card_final_logo.mp4"
-        card_video = gerar_card_logo(
-            card_final_path,
-            card_image_path,
-            duracao=BRAND_CARD_DURATION_SECONDS,
-            largura=largura,
-            altura=altura,
-            fundo=cor_de_fundo_do_cartao(card_image_path),
+    video_path = _gerar_video_com_fallback(
+        render_plan.model_config,
+        shot.visual_prompt_en,
+        aspecto=render_plan.aspect_ratio,
+        resolucao=render_plan.inputs.request.resolution,
+        duracao=duration,
+        output_path=f"{base_path}.mp4",
+        reference_image_url=(
+            render_plan.reference_image_url if render_plan.shot_reference_flags[shot_index] else None
+        ),
+        extra_arguments=render_plan.model_config.default_arguments,
+    )
+    if not video_path:
+        raise _required_step_failure(
+            service="higgsfield",
+            stage="generating",
+            code="scene_generation_failed",
+            message=f"Falha na geração da cena {shot.shot_number} usando {render_plan.model_config.label}.",
         )
-        if card_video:
-            rendered_scenes.append(str(card_video))
-        else:
+    return Path(video_path), False
+
+
+def generate_media(
+    render_plan: RenderPlan,
+    progress_cb: ProgressCallback | None = None,
+) -> Result[GeneratedMedia]:
+    """Synthesize the narration and generate the raw video of every shot."""
+
+    def build() -> GeneratedMedia:
+        plan = render_plan.inputs.plan
+        request = render_plan.inputs.request
+        warnings: list[str] = []
+
+        _report(progress_cb, "generating_audio", "Gerando e medindo as narrações...")
+        narration = fit_narration_to_budget(
+            [shot.narration_text_pt for shot in plan.shots],
+            [shot.duration_seconds for shot in plan.shots],
+            budget_seconds=request.duration_seconds - render_plan.card_duration,
+            duration_range=_faixa_de_duracao(render_plan.model_config),
+            synthesize=_synthesize_narration(render_plan),
+        )
+        script_warning = budget_warning(
+            narration,
+            ceiling_seconds=request.duration_seconds,
+            reserved_seconds=render_plan.card_duration,
+            available_ceilings=get_args(DurationLiteral),
+        )
+        if script_warning:
+            warnings.append(script_warning)
+
+        shots: list[ShotMedia] = []
+        for shot_index, shot in enumerate(plan.shots):
+            _report(
+                progress_cb,
+                "generating",
+                f"Gerando cena {shot.shot_number}/{len(plan.shots)}: {plan.title}",
+            )
+            video_path, product_integrated = _generate_shot_video(
+                render_plan,
+                shot_index,
+                narration.shot_durations[shot_index],
+                warnings,
+                progress_cb,
+            )
+            shots.append(
+                ShotMedia(
+                    shot=shot,
+                    base_path=render_plan.scenes_dir / f"shot_{shot.shot_number:02d}",
+                    video_path=video_path,
+                    narration=narration.clips[shot_index],
+                    product_integrated=product_integrated,
+                )
+            )
+        return GeneratedMedia(shots=tuple(shots), warnings=tuple(warnings))
+
+    return _capture(build)
+
+
+def _compose_shot(render_plan: RenderPlan, media: ShotMedia) -> Path:
+    shot = media.shot
+    current_video_path = media.video_path
+
+    if media.narration is not None:
+        combined_path = combinar_video_audio(
+            current_video_path,
+            media.narration.audio_path,
+            f"{media.base_path}_combined.mp4",
+        )
+        if not combined_path:
+            raise _required_step_failure(
+                service="ffmpeg",
+                stage="composing_audio",
+                code="audio_composition_failed",
+                message=f"Falha ao combinar a narração da cena {shot.shot_number}.",
+            )
+        current_video_path = Path(combined_path)
+
+    if shot.product_overlay.ativo and not media.product_integrated:
+        overlay_path = overlay_produto(
+            current_video_path,
+            f"{media.base_path}_produto.mp4",
+            produto_path=render_plan.product_overlay_path,
+            posicao=shot.product_overlay.posicao,
+            tamanho_pct=shot.product_overlay.tamanho_pct,
+            inicio_seg=shot.product_overlay.inicio_seg,
+        )
+        if not overlay_path:
             raise _required_step_failure(
                 service="ffmpeg",
                 stage="composing",
-                code="brand_card_failed",
-                message="Falha ao gerar o card final da marca.",
+                code="product_overlay_failed",
+                message=f"Falha ao aplicar a embalagem na cena {shot.shot_number}.",
             )
+        current_video_path = Path(overlay_path)
 
-    if progress_cb:
-        progress_cb("composing", "Compondo vídeo final e aplicando marca da empresa...")
+    if shot.overlay_text:
+        text_path = adicionar_texto_overlay(
+            current_video_path,
+            shot.overlay_text,
+            f"{media.base_path}_texto.mp4",
+            _posicao_do_texto(shot),
+        )
+        if not text_path:
+            raise _required_step_failure(
+                service="ffmpeg",
+                stage="composing",
+                code="text_overlay_failed",
+                message=f"Falha ao aplicar o texto da cena {shot.shot_number}.",
+            )
+        current_video_path = Path(text_path)
 
-    final_video = compor_video_final(
-        rendered_scenes,
-        plan.title,
-        logo_path_to_use if apply_logo_overlay else None,
-        largura=largura,
-        altura=altura,
-        output_dir=final_dir,
-        duracao_maxima=request.duration_seconds,
-        duracao_card_final=card_duration,
+    return current_video_path
+
+
+def _brand_image_warnings(render_plan: RenderPlan) -> list[str]:
+    ref_logo_path = render_plan.inputs.ref_logo_path
+    warnings: list[str] = []
+    for image_path, largura_exibida in _imagens_da_marca(
+        render_plan.inputs.plan,
+        largura_video=render_plan.width,
+        produto_overlay_path=render_plan.product_overlay_path,
+        logo_path=render_plan.logo_path,
+        card_image_path=render_plan.card_image_path,
+    ).items():
+        rotulo = "logo" if ref_logo_path and image_path == Path(ref_logo_path) else "embalagem"
+        warnings.extend(_avisos_qualidade_imagem(rotulo, image_path, largura_exibida))
+    return warnings
+
+
+def _render_brand_card(render_plan: RenderPlan, card_image_path: Path) -> Path:
+    card_video = gerar_card_logo(
+        render_plan.final_dir / "card_final_logo.mp4",
+        card_image_path,
+        duracao=BRAND_CARD_DURATION_SECONDS,
+        largura=render_plan.width,
+        altura=render_plan.height,
+        fundo=cor_de_fundo_do_cartao(card_image_path),
     )
-    if not final_video:
+    if not card_video:
         raise _required_step_failure(
             service="ffmpeg",
             stage="composing",
-            code="final_video_invalid",
-            message="Falha na composição ou validação do vídeo final.",
+            code="brand_card_failed",
+            message="Falha ao gerar o card final da marca.",
+        )
+    return Path(card_video)
+
+
+def compose_video(
+    render_plan: RenderPlan,
+    media: GeneratedMedia,
+    progress_cb: ProgressCallback | None = None,
+) -> Result[ComposedVideo]:
+    """Add narration, product, text and brand card to the scenes and join them."""
+
+    def build() -> ComposedVideo:
+        scene_paths = [_compose_shot(render_plan, shot_media) for shot_media in media.shots]
+        warnings = _brand_image_warnings(render_plan)
+
+        if render_plan.card_image_path:
+            _report(progress_cb, "composing", "Gerando card final com a logo da marca...")
+            scene_paths.append(_render_brand_card(render_plan, render_plan.card_image_path))
+
+        _report(progress_cb, "composing", "Compondo vídeo final e aplicando marca da empresa...")
+        request = render_plan.inputs.request
+        final_video = compor_video_final(
+            [str(path) for path in scene_paths],
+            render_plan.inputs.plan.title,
+            render_plan.logo_path,
+            largura=render_plan.width,
+            altura=render_plan.height,
+            output_dir=render_plan.final_dir,
+            duracao_maxima=request.duration_seconds,
+            duracao_card_final=render_plan.card_duration,
+        )
+        if not final_video:
+            raise _required_step_failure(
+                service="ffmpeg",
+                stage="composing",
+                code="final_video_invalid",
+                message="Falha na composição ou validação do vídeo final.",
+            )
+        return ComposedVideo(
+            final_video_path=Path(final_video),
+            scene_paths=tuple(scene_paths),
+            warnings=tuple(warnings),
         )
 
-    if progress_cb:
-        progress_cb("uploading_drive", "Tentando enviar o vídeo final para o Google Drive...")
-    drive_result = upload_para_drive(final_video)
-    if not drive_result and JW_DRIVE_REQUIRED:
-        raise _required_step_failure(
-            service="google_drive",
-            stage="uploading_drive",
-            code="drive_upload_failed",
-            message="Falha ao entregar o vídeo final no Google Drive.",
-            render_confirmed=True,
-        )
-    if not drive_result:
-        warnings.append(
-            "Google Drive indisponível; o vídeo permanece disponível para download pelo Studio."
-        )
+    return _capture(build)
 
-    manifest_path = job_dir / "manifesto_render.json"
-    manifest_path.write_text(
-        json.dumps(
-            {
-                "titulo": plan.title,
-                "modelo_video": model_config.label,
-                "modelo_tier": model_config.tier,
-                "aspect_ratio": aspect_ratio,
-                "resolucao": request.resolution,
-                "cenas": rendered_scenes,
-                "saida_final": str(final_video),
-                "google_drive": drive_result,
-                "ref_embalagem_usada": ref_embalagem_path or "padrão",
-                "ref_logo_usada": str(logo_path_to_use) if logo_path_to_use else "nenhuma",
-                "logo_overlay_aplicado": apply_logo_overlay,
-                "warnings": warnings,
-            },
-            indent=2,
-            ensure_ascii=False,
-        ),
+
+def publish_video(
+    composed: ComposedVideo,
+    progress_cb: ProgressCallback | None = None,
+) -> Result[PublishedVideo]:
+    """Deliver the final video to Google Drive when it is configured."""
+
+    _report(progress_cb, "uploading_drive", "Tentando enviar o vídeo final para o Google Drive...")
+    drive_result = upload_para_drive(composed.final_video_path)
+    if drive_result:
+        return Ok(PublishedVideo(drive_result=drive_result, warnings=()))
+    if JW_DRIVE_REQUIRED:
+        return Err(
+            _required_step_failure(
+                service="google_drive",
+                stage="uploading_drive",
+                code="drive_upload_failed",
+                message="Falha ao entregar o vídeo final no Google Drive.",
+                render_confirmed=True,
+            )
+        )
+    return Ok(
+        PublishedVideo(
+            drive_result=None,
+            warnings=("Google Drive indisponível; o vídeo permanece disponível para download pelo Studio.",),
+        )
+    )
+
+
+class RenderStageLog:
+    """Records the outcome of each render stage in the job folder."""
+
+    def __init__(self, job_dir: Path) -> None:
+        self._path = job_dir / RENDER_STAGES_FILENAME
+        self._stages: dict[str, dict[str, object]] = {
+            stage.value: {"status": StageStatus.PENDING.value} for stage in RenderStage
+        }
+        self._save()
+
+    def completed(self, stage: RenderStage) -> None:
+        self._stages[stage.value] = {"status": StageStatus.COMPLETED.value, "finished_at": _now_iso()}
+        self._save()
+
+    def failed(self, stage: RenderStage, failure: IntegrationFailure) -> None:
+        self._stages[stage.value] = {
+            "status": StageStatus.FAILED.value,
+            "finished_at": _now_iso(),
+            "failure_code": failure.code,
+            "failed_service": failure.service,
+            "retryable": failure.retryable,
+        }
+        self._save()
+
+    def _save(self) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(json.dumps(self._stages, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _unwrap(result: Result[T], stage: RenderStage, stage_log: RenderStageLog) -> T:
+    if isinstance(result, Err):
+        stage_log.failed(stage, result.failure)
+        raise result.failure
+    stage_log.completed(stage)
+    return result.value
+
+
+def _write_manifest(
+    render_plan: RenderPlan,
+    composed: ComposedVideo,
+    published: PublishedVideo,
+    warnings: list[str],
+) -> None:
+    inputs = render_plan.inputs
+    manifest = {
+        "titulo": inputs.plan.title,
+        "modelo_video": render_plan.model_config.label,
+        "modelo_tier": render_plan.model_config.tier,
+        "aspect_ratio": render_plan.aspect_ratio,
+        "resolucao": inputs.request.resolution,
+        "cenas": [str(path) for path in composed.scene_paths],
+        "saida_final": str(composed.final_video_path),
+        "google_drive": published.drive_result,
+        "ref_embalagem_usada": inputs.ref_embalagem_path or "padrão",
+        "ref_logo_usada": str(render_plan.logo_path) if render_plan.logo_path else "nenhuma",
+        "logo_overlay_aplicado": inputs.apply_logo_overlay,
+        "warnings": warnings,
+    }
+    (inputs.job_dir / MANIFEST_FILENAME).write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
 
+
+def render_planned_video(
+    *,
+    job_dir: Path,
+    request: CreateJobRequest,
+    plan: PlannerOutput,
+    model_config: VideoModelConfig,
+    progress_cb: ProgressCallback | None = None,
+    ref_embalagem_path: str | None = None,
+    ref_logo_path: str | None = None,
+    ref_cores_path: str | None = None,
+    apply_logo_overlay: bool = True,
+    use_product_reference: bool = True,
+) -> dict[str, object]:
+    """Run the plan, generate media, compose and publish stages for one job."""
+
+    inputs = RenderInputs(
+        job_dir=job_dir,
+        request=request,
+        plan=plan,
+        model_config=model_config,
+        ref_embalagem_path=ref_embalagem_path,
+        ref_logo_path=ref_logo_path,
+        apply_logo_overlay=apply_logo_overlay,
+        use_product_reference=use_product_reference,
+    )
+    stage_log = RenderStageLog(job_dir)
+
+    render_plan = _unwrap(plan_render(inputs, progress_cb), RenderStage.PLAN, stage_log)
+    media = _unwrap(generate_media(render_plan, progress_cb), RenderStage.GENERATE_MEDIA, stage_log)
+    composed = _unwrap(compose_video(render_plan, media, progress_cb), RenderStage.COMPOSE, stage_log)
+    published = _unwrap(publish_video(composed, progress_cb), RenderStage.PUBLISH, stage_log)
+
+    warnings = [
+        *render_plan.warnings,
+        *media.warnings,
+        *composed.warnings,
+        *published.warnings,
+    ]
+    _write_manifest(render_plan, composed, published, warnings)
+
+    drive_result = published.drive_result
     return {
-        "final_video_path": str(final_video),
+        "final_video_path": str(composed.final_video_path),
         "drive_file_id": drive_result.get("id") if drive_result else None,
         "drive_url": drive_result.get("link") if drive_result else None,
         "warnings": warnings,
