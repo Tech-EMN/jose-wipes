@@ -10,13 +10,13 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 
-from scripts.product_reference import (
+from jose_wipes.composition.product_reference import (
     detectar_gatilhos_referencia_produto,
     obter_imagem_produto_path,
     prompt_pede_referencia_produto,
 )
-from scripts.openai_utils import create_text_response
-from scripts.higgsfield_utils import upload_higgsfield_file
+from jose_wipes.integrations.openai_utils import create_text_response
+from jose_wipes.integrations.higgsfield_utils import upload_higgsfield_file
 
 # Fix Windows console encoding
 if sys.stdout.encoding != "utf-8":
@@ -286,7 +286,7 @@ def decompor_briefing(briefing: str) -> dict:
     """Chama OpenAI GPT com o system prompt montado, parseia JSON, retorna o plano."""
     try:
         from openai import OpenAI
-        from scripts.system_prompt import montar_system_prompt
+        from jose_wipes.planning.system_prompt import montar_system_prompt
 
         client = OpenAI(api_key=OPENAI_API_KEY)
         system = montar_system_prompt()
@@ -316,7 +316,3 @@ def decompor_briefing(briefing: str) -> dict:
     except Exception as e:
         print(f"  ✗ Erro ao decompor briefing: {e}")
         return {}
-
-
-if __name__ == "__main__":
-    validar_configuracao()

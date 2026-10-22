@@ -9,8 +9,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from webapp.job_manager import FilePollingJobManager, JobManager
-from webapp.schemas import CreateJobRequest
+from jose_wipes.jobs.job_manager import FilePollingJobManager, JobManager
+from jose_wipes.schemas import CreateJobRequest
 
 
 def _make_request(**overrides) -> CreateJobRequest:

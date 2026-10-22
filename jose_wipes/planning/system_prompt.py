@@ -2,12 +2,9 @@
 
 import sys
 import json
-import argparse
-from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from scripts.config import brandbook_para_contexto, carregar_vozes
+from jose_wipes.config import brandbook_para_contexto, carregar_vozes
 
 
 # ========== BLOCO 1 — IDENTIDADE ==========
@@ -331,29 +328,3 @@ def info_prompt():
 
     print(f"\n  {presentes}/{len(componentes)} componentes presentes")
     return prompt
-
-
-def main():
-    parser = argparse.ArgumentParser(description="System Prompt José Wipes")
-    parser.add_argument("--info", action="store_true", help="Mostra info do prompt")
-    parser.add_argument("--exportar", type=str, help="Salva prompt em arquivo")
-    parser.add_argument("--preview", type=int, help="Mostra primeiros N caracteres")
-    args = parser.parse_args()
-
-    if args.info or (not args.exportar and not args.preview):
-        info_prompt()
-
-    if args.exportar:
-        prompt = montar_system_prompt()
-        Path(args.exportar).write_text(prompt, encoding="utf-8")
-        print(f"\n  ✓ Prompt exportado para: {args.exportar}")
-
-    if args.preview:
-        prompt = montar_system_prompt()
-        print(f"\n--- Preview ({args.preview} chars) ---\n")
-        print(prompt[:args.preview])
-        print(f"\n--- Fim do preview ---")
-
-
-if __name__ == "__main__":
-    main()

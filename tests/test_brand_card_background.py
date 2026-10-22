@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.compositor import (
+from jose_wipes.composition.compositor import (
     CARD_BACKGROUND_DARK,
     CARD_BACKGROUND_LIGHT,
     brilho_da_marca,

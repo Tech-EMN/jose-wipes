@@ -114,7 +114,7 @@ def load_e2e_plan() -> dict[str, Any]:
 def run_e2e_fixture():
     """Roda o plano fixo pelo mesmo pipeline da web, sem chamar o planner."""
     from scripts.pipeline import run_pipeline
-    from webapp.schemas import CreateJobRequest, PlannerOutput
+    from jose_wipes.schemas import CreateJobRequest, PlannerOutput
 
     plan = PlannerOutput.model_validate(load_e2e_plan())
     request = CreateJobRequest(
@@ -339,8 +339,8 @@ def test_e2e_worker_recovery():
     import sys
     sys.path.insert(0, str(PROJECT_ROOT))
 
-    from webapp.job_manager import JobManager
-    from webapp.schemas import CreateJobRequest, JobStatusResponse
+    from jose_wipes.jobs.job_manager import JobManager
+    from jose_wipes.schemas import CreateJobRequest, JobStatusResponse
 
     # Criar job manager isolado para este teste
     test_dir = E2E_OUTPUT / "recovery_test"
@@ -428,7 +428,7 @@ def test_e2e_worker_recovery():
 @pytest.mark.e2e
 def test_e2e_external_health():
     """Verifica conectividade com todos os serviços externos."""
-    from scripts.external_health import probe_external_health
+    from jose_wipes.integrations.external_health import probe_external_health
 
     health = probe_external_health(startup_mode="test")
 

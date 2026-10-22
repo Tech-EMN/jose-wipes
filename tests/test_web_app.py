@@ -21,7 +21,7 @@ def main():
 
     from webapp.main import app
     import webapp.main as main_module
-    from webapp.schemas import ExternalHealthResponse, ExternalServiceHealth, JobStatusResponse
+    from jose_wipes.schemas import ExternalHealthResponse, ExternalServiceHealth, JobStatusResponse
 
     temp_dir = Path(__file__).parent.parent / "output" / "test_web_app"
     if temp_dir.exists():
@@ -72,7 +72,7 @@ def main():
                 return video_path
 
         main_module.job_manager = FakeManager()
-        main_module.get_web_server_status = lambda **kwargs: {
+        main_module.read_runtime = lambda **kwargs: {
             "startup_mode": "runner",
             "external_connectivity_checked": True,
         }

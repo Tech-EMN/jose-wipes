@@ -4,15 +4,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import webapp.model_registry as registry
-from scripts.higgsfield_model_profiles import (
+import jose_wipes.model_registry as registry
+from jose_wipes.integrations.higgsfield_model_profiles import (
     KLING_3_0_PRO_APPLICATION,
     KLING_3_0_STD_APPLICATION,
     WAN_3_0_PRIME_APPLICATION,
     find_argument_profile,
 )
-from scripts.integration_errors import IntegrationFailure
-from webapp.pipeline_service import _gerar_video_com_fallback
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.rendering.pipeline_service import _gerar_video_com_fallback
 
 TIER_ENV_VARS = ("HF_MODEL_PADRAO", "HF_MODEL_PADRAO_1080P", "HF_MODEL_KLING_3_0", "HF_MODEL_PROFISSIONAL")
 
@@ -119,7 +119,7 @@ def _generate_with(generators: dict[str, MagicMock], tmp_path: Path):
         fallback_application=KLING_3_0_PRO_APPLICATION,
     )
     with patch(
-        "webapp.video_generator.create_video_generator",
+        "jose_wipes.integrations.video_generator.create_video_generator",
         side_effect=lambda application, **_kwargs: generators[application],
     ):
         return _gerar_video_com_fallback(

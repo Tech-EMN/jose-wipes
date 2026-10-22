@@ -9,11 +9,11 @@ from unittest.mock import patch
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.config import OPENAI_PLANNER_MODEL
-from scripts.integration_errors import IntegrationFailure
-from webapp.model_registry import get_model_config
-from webapp.planner import plan_web_video
-from webapp.schemas import CreateJobRequest
+from jose_wipes.config import OPENAI_PLANNER_MODEL
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.model_registry import get_model_config
+from jose_wipes.planning.planner import plan_web_video
+from jose_wipes.schemas import CreateJobRequest
 
 
 class FakeCompletions:
@@ -102,8 +102,8 @@ def main():
         }
 
         capture = {}
-        with patch("webapp.planner.OPENAI_API_KEY", "test-key"), patch(
-            "webapp.planner.OpenAI",
+        with patch("jose_wipes.planning.planner.OPENAI_API_KEY", "test-key"), patch(
+            "jose_wipes.planning.planner.OpenAI",
             side_effect=lambda **kwargs: FakeClient(sanitizing_payload, capture, **kwargs),
         ):
             plan = plan_web_video(
@@ -177,8 +177,8 @@ def main():
         invalid_payload = _base_payload()
         invalid_payload["title"] = ""
         invalid_capture = {}
-        with patch("webapp.planner.OPENAI_API_KEY", "test-key"), patch(
-            "webapp.planner.OpenAI",
+        with patch("jose_wipes.planning.planner.OPENAI_API_KEY", "test-key"), patch(
+            "jose_wipes.planning.planner.OpenAI",
             side_effect=lambda **kwargs: FakeClient(invalid_payload, invalid_capture, **kwargs),
         ):
             try:

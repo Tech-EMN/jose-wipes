@@ -9,7 +9,7 @@ from datetime import datetime
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from scripts.config import (
+from jose_wipes.config import (
     ELEVENLABS_API_KEY, CONFIG_DIR, OUTPUT_DIR, ASSETS_DIR, gerar_audio
 )
 

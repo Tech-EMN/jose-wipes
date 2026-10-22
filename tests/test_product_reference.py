@@ -5,7 +5,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
 
-from scripts.product_reference import (
+from jose_wipes.composition.product_reference import (
     aplicar_regra_referencia_produto_plano,
     detectar_gatilhos_referencia_produto,
     obter_imagem_produto_path,

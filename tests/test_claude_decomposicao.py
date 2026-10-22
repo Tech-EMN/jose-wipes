@@ -6,8 +6,8 @@ import time
 sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
-from scripts.config import OPENAI_API_KEY, OPENAI_PLANNER_MODEL, OUTPUT_DIR
-from scripts.openai_utils import create_text_response
+from jose_wipes.config import OPENAI_API_KEY, OPENAI_PLANNER_MODEL, OUTPUT_DIR
+from jose_wipes.integrations.openai_utils import create_text_response
 
 
 SYSTEM_PROMPT = """Você é o diretor criativo da marca José Wipes. Receba um briefing de vídeo em português e decomponha em cenas. Para cada cena retorne: titulo, tipo (lip_sync/broll/product_shot), prompt em INGLÊS otimizado para IA generativa (mín 50 palavras), duracao_alvo em segundos, notas_audio em português. Responda APENAS com JSON puro, sem markdown."""

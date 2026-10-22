@@ -3,19 +3,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import webapp.model_registry as registry
-from scripts.higgsfield_model_profiles import (
+import jose_wipes.model_registry as registry
+from jose_wipes.integrations.higgsfield_model_profiles import (
     KLING_3_0_PRO_IMAGE_TO_VIDEO_APPLICATION,
     KLING_3_0_STD_IMAGE_TO_VIDEO_APPLICATION,
     SOUL_2_APPLICATION,
     WAN_3_0_PRIME_IMAGE_TO_VIDEO_APPLICATION,
     find_argument_profile,
 )
-from scripts.integration_errors import IntegrationFailure
-from webapp.model_registry import VideoModelConfig, get_model_config
-from webapp.pipeline_service import render_planned_video
-from webapp.planner import PRODUCT_COMPOSITING_VISUAL_CONSTRAINT
-from webapp.product_scene import (
+from jose_wipes.integrations.errors import IntegrationFailure
+from jose_wipes.model_registry import VideoModelConfig, get_model_config
+from jose_wipes.rendering.pipeline_service import render_planned_video
+from jose_wipes.planning.planner import PRODUCT_COMPOSITING_VISUAL_CONSTRAINT
+from jose_wipes.composition.product_scene import (
     ANIMATION_CONSTRAINT,
     KEYFRAME_SURFACE_HINT,
     KeyframeSpec,
@@ -24,7 +24,7 @@ from webapp.product_scene import (
     render_product_keyframe,
     shot_integrates_product,
 )
-from webapp.schemas import CreateJobRequest, PlannerOutput, PlannerShot, ProductOverlayConfig
+from jose_wipes.schemas import CreateJobRequest, PlannerOutput, PlannerShot, ProductOverlayConfig
 
 COMPOSED_PROMPT = (
     "A dim support group room with a wooden table in the foreground. "
@@ -122,8 +122,8 @@ def _spec(tmp_path: Path) -> KeyframeSpec:
 def test_keyframe_is_generated_with_soul_and_receives_the_package(tmp_path: Path) -> None:
     still = tmp_path / "shot_01_cena.png"
     composed = tmp_path / "shot_01_cena_produto.png"
-    with patch("webapp.product_scene.gerar_video_higgsfield", return_value=str(still)) as generate, patch(
-        "webapp.product_scene.compor_produto_em_cena", return_value=composed
+    with patch("jose_wipes.composition.product_scene.gerar_video_higgsfield", return_value=str(still)) as generate, patch(
+        "jose_wipes.composition.product_scene.compor_produto_em_cena", return_value=composed
     ) as compose:
         result = render_product_keyframe(_spec(tmp_path))
 
@@ -134,8 +134,8 @@ def test_keyframe_is_generated_with_soul_and_receives_the_package(tmp_path: Path
 
 
 def test_keyframe_composition_failure_is_reported(tmp_path: Path) -> None:
-    with patch("webapp.product_scene.gerar_video_higgsfield", return_value=str(tmp_path / "s.png")), patch(
-        "webapp.product_scene.compor_produto_em_cena", return_value=None
+    with patch("jose_wipes.composition.product_scene.gerar_video_higgsfield", return_value=str(tmp_path / "s.png")), patch(
+        "jose_wipes.composition.product_scene.compor_produto_em_cena", return_value=None
     ), pytest.raises(IntegrationFailure) as captured:
         render_product_keyframe(_spec(tmp_path))
 
@@ -156,17 +156,17 @@ def _render(tmp_path: Path, shots: list[PlannerShot], *, keyframe_effect: object
 
     overlay = MagicMock(side_effect=lambda video, output, **_kwargs: output)
     keyframe = MagicMock(side_effect=keyframe_effect)
-    with patch("webapp.pipeline_service.gerar_audio_elevenlabs", side_effect=lambda _p, _t, out: out), patch(
-        "webapp.pipeline_service.medir_duracao_segundos", return_value=2.0
-    ), patch("webapp.pipeline_service._gerar_video_com_fallback", side_effect=fake_video), patch(
-        "webapp.pipeline_service.render_product_keyframe", keyframe
-    ), patch("webapp.pipeline_service._upload_reference_image", return_value=KEYFRAME_URL), patch(
-        "webapp.pipeline_service.combinar_video_audio", side_effect=lambda _v, _a, out: out
-    ), patch("webapp.pipeline_service.overlay_produto", overlay), patch(
-        "webapp.pipeline_service.adicionar_texto_overlay", side_effect=lambda video, _t, out, _p: out
-    ), patch("webapp.pipeline_service.gerar_card_logo", side_effect=lambda out, *_a, **_k: out), patch(
-        "webapp.pipeline_service.compor_video_final", return_value=final_path
-    ), patch("webapp.pipeline_service.upload_para_drive", return_value={"id": "1", "link": "l"}):
+    with patch("jose_wipes.rendering.pipeline_service.gerar_audio_elevenlabs", side_effect=lambda _p, _t, out: out), patch(
+        "jose_wipes.rendering.pipeline_service.medir_duracao_segundos", return_value=2.0
+    ), patch("jose_wipes.rendering.pipeline_service._gerar_video_com_fallback", side_effect=fake_video), patch(
+        "jose_wipes.rendering.pipeline_service.render_product_keyframe", keyframe
+    ), patch("jose_wipes.rendering.pipeline_service._upload_reference_image", return_value=KEYFRAME_URL), patch(
+        "jose_wipes.rendering.pipeline_service.combinar_video_audio", side_effect=lambda _v, _a, out: out
+    ), patch("jose_wipes.rendering.pipeline_service.overlay_produto", overlay), patch(
+        "jose_wipes.rendering.pipeline_service.adicionar_texto_overlay", side_effect=lambda video, _t, out, _p: out
+    ), patch("jose_wipes.rendering.pipeline_service.gerar_card_logo", side_effect=lambda out, *_a, **_k: out), patch(
+        "jose_wipes.rendering.pipeline_service.compor_video_final", return_value=final_path
+    ), patch("jose_wipes.rendering.pipeline_service.upload_para_drive", return_value={"id": "1", "link": "l"}):
         result = render_planned_video(
             job_dir=tmp_path / "job",
             request=CreateJobRequest(
@@ -211,7 +211,7 @@ def test_gesture_shot_keeps_the_overlay(tmp_path: Path) -> None:
 
 
 def test_planner_prefers_the_package_resting_on_a_surface() -> None:
-    from webapp.planner import _planner_system_prompt
+    from jose_wipes.planning.planner import _planner_system_prompt
 
     prompt = _planner_system_prompt(orientation="vertical")
 

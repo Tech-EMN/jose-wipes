@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scripts.integration_errors import IntegrationFailure
+from jose_wipes.integrations.errors import IntegrationFailure
 
 def extract_response_output_text(response: object) -> str:
     """Extract plain text from an OpenAI Responses API object."""

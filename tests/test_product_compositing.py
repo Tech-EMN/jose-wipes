@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.compositor import compor_produto_em_cena, ganho_do_produto
+from jose_wipes.composition.compositor import compor_produto_em_cena, ganho_do_produto
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 

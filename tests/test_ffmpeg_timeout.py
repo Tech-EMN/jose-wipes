@@ -6,7 +6,7 @@ import subprocess
 import pytest
 from unittest.mock import patch, MagicMock
 
-from scripts.compositor import _subprocess_run, _DEFAULT_FFMPEG_TIMEOUT
+from jose_wipes.composition.compositor import _subprocess_run, _DEFAULT_FFMPEG_TIMEOUT
 
 
 class TestSubprocessRunDefaultTimeout:
@@ -56,8 +56,8 @@ class TestSubprocessRunDefaultTimeout:
 
     def test_timeout_applied_to_normalizar_ffmpeg_call(self):
         """The ffmpeg call in normalizar_cena should receive a timeout."""
-        with patch("scripts.compositor._subprocess_run") as mock_run:
-            from scripts.compositor import normalizar_cena
+        with patch("jose_wipes.composition.compositor._subprocess_run") as mock_run:
+            from jose_wipes.composition.compositor import normalizar_cena
             import tempfile
             from pathlib import Path
 
@@ -76,8 +76,8 @@ class TestSubprocessRunDefaultTimeout:
 
     def test_timeout_applied_to_concatenar_ffmpeg_calls(self):
         """The ffmpeg calls in concatenar_cenas should receive a timeout."""
-        with patch("scripts.compositor._subprocess_run") as mock_run:
-            from scripts.compositor import concatenar_cenas
+        with patch("jose_wipes.composition.compositor._subprocess_run") as mock_run:
+            from jose_wipes.composition.compositor import concatenar_cenas
             import tempfile
             from pathlib import Path
 
@@ -101,7 +101,7 @@ class TestDefaultTimeoutValue:
         """JW_FFMPEG_TIMEOUT env var should allow customization."""
         monkeypatch.setenv("JW_FFMPEG_TIMEOUT", "600")
         import importlib
-        import scripts.compositor as comp
+        import jose_wipes.composition.compositor as comp
         importlib.reload(comp)
         assert comp._DEFAULT_FFMPEG_TIMEOUT == 600
 
@@ -109,7 +109,7 @@ class TestDefaultTimeoutValue:
         """gerador_midia.py _subprocess_run also applies default timeout."""
         monkeypatch.setenv("JW_FFMPEG_TIMEOUT", "300")
         import importlib
-        import scripts.gerador_midia as gm
+        import jose_wipes.integrations.gerador_midia as gm
         importlib.reload(gm)
 
         with patch("subprocess.run") as mock_run:

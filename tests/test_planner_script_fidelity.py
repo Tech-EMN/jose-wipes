@@ -3,14 +3,14 @@ from unittest.mock import patch
 
 import pytest
 
-from webapp.model_registry import get_model_config
-from webapp.planner import (
+from jose_wipes.model_registry import get_model_config
+from jose_wipes.planning.planner import (
     _expected_shot_count,
     _narration_word_budget,
     _planner_system_prompt,
     plan_web_video,
 )
-from webapp.schemas import CreateJobRequest
+from jose_wipes.schemas import CreateJobRequest
 
 SCRIPT_LINES = (
     "Aeroporto lotado, banheiro sem papel e um voo em quarenta minutos.",
@@ -59,9 +59,9 @@ def _plan(duration_seconds: int, narrations: list[str], pdf_text: str) -> tuple[
         captured.update(kwargs)
         return json.dumps(_payload(narrations), ensure_ascii=False)
 
-    with patch("webapp.planner.OPENAI_API_KEY", "test-key"), patch(
-        "webapp.planner.OpenAI", return_value=object()
-    ), patch("webapp.planner.create_text_response", side_effect=respond):
+    with patch("jose_wipes.planning.planner.OPENAI_API_KEY", "test-key"), patch(
+        "jose_wipes.planning.planner.OpenAI", return_value=object()
+    ), patch("jose_wipes.planning.planner.create_text_response", side_effect=respond):
         plan = plan_web_video(_request(duration_seconds), pdf_text, get_model_config("kling_3_0"))
     return plan, captured
 
